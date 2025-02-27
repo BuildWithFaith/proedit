@@ -1,5 +1,5 @@
 {
-  "name": "my-v0-project",
+  "name": "",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -55,7 +55,7 @@
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "motion": "latest",
-    "next": "15.1.7",
+    "next": "15.2.0",
     "next-themes": "^0.4.4",
     "peerjs": "latest",
     "qrcode.react": "latest",
