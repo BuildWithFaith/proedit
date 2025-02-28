@@ -462,70 +462,272 @@ export default function Home() {
     ]).then(() => console.log("✅ All backgrounds preloaded!"));
   }, []);
 
+  const endCall = () => {
+    console.log("📞 Ending call...");
+    
+    // 1. Get references to all connections first
+    const currentPeer = peer;
+    const currentLocalVideo = localVideoRef.current;
+    const currentRemoteVideo = remoteVideoRef.current;
+    const currentCanvas = canvasRef.current;
+    const currentVideoElement = videoElement.current;
+    
+    // 2. Close all media connections specifically
+    if (currentPeer) {
+      try {
+        // Properly close each media connection
+        Object.values(currentPeer.connections).forEach(connections => {
+          connections.forEach((conn: any) => {
+            console.log("Closing connection:", conn);
+            if (conn.type === 'media' && conn.close) {
+              conn.close();
+            }
+            if (conn.peerConnection) {
+              conn.peerConnection.close();
+            }
+          });
+        });
+        
+        // Remove all listeners to avoid memory leaks
+        currentPeer.removeAllListeners();
+      } catch (e) {
+        console.error("Error closing peer connections:", e);
+      }
+    }
+    
+    // 3. Stop all media tracks from all possible sources
+    const stopAllTracksFromStream = (stream: MediaStream | null) => {
+      if (!stream) return;
+      console.log("Stopping tracks for stream:", stream.id);
+      stream.getTracks().forEach(track => {
+        console.log("Stopping track:", track.id, track.kind);
+        track.stop();
+      });
+    };
+    
+    // Stop local video stream
+    if (currentLocalVideo?.srcObject) {
+      stopAllTracksFromStream(currentLocalVideo.srcObject as MediaStream);
+      currentLocalVideo.srcObject = null;
+      console.log("✅ Local video stream cleared");
+    }
+    
+    // Stop remote video stream
+    if (currentRemoteVideo?.srcObject) {
+      stopAllTracksFromStream(currentRemoteVideo.srcObject as MediaStream);
+      currentRemoteVideo.srcObject = null;
+      console.log("✅ Remote video stream cleared");
+    }
+    
+    // Stop original user media stream
+    if (currentVideoElement?.srcObject) {
+      stopAllTracksFromStream(currentVideoElement.srcObject as MediaStream);
+      currentVideoElement.srcObject = null;
+      console.log("✅ Original video element stream cleared");
+    }
+    
+    // Stop canvas stream
+    if (currentCanvas) {
+      try {
+        const canvasStream = currentCanvas.captureStream();
+        stopAllTracksFromStream(canvasStream);
+        console.log("✅ Canvas stream stopped");
+      } catch (e) {
+        console.error("Error stopping canvas stream:", e);
+      }
+    }
+    
+    // 4. Reset global state
+    setRemoteStream(null);
+    
+    // 5. Clean up WebGL resources
+    if (glRef.current) {
+      try {
+        const gl = glRef.current;
+        
+        // Delete textures
+        if (videoTextureRef.current) gl.deleteTexture(videoTextureRef.current);
+        if (maskTextureRef.current) gl.deleteTexture(maskTextureRef.current);
+        
+        // Delete program and shaders
+        if (programRef.current) {
+          gl.deleteProgram(programRef.current);
+          programRef.current = null;
+        }
+        
+        console.log("✅ WebGL resources cleaned up");
+      } catch (e) {
+        console.error("Error cleaning up WebGL resources:", e);
+      }
+    }
+    
+    // 6. Reset BodyPix model
+    net = null;
+    
+    console.log("✅ Call ended successfully");
+  };
+
   return (
-    <div 
-      className="absolute inset-0 bg-cover bg-center transition-all duration-300"
-      style={{ backgroundImage: `url(${selectedBackground})` }}
-    >
-      <h1 className="text-xl mb-4">Video Call with WebGL Background Removal</h1>
-      <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4 mb-4">
-        <div className="flex flex-col items-center">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-64 h-48 bg-black rounded"
-          />
-          <p className="mt-2">Your ID: {peerId}</p>
-        </div>
-        <div className="flex flex-col items-center">
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="w-64 h-48 bg-black rounded"
-          />
-          <p className="mt-2">Remote Video</p>
+    <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black transition-all duration-300 flex flex-col items-center justify-center text-white min-h-screen p-6">
+      {/* Status Bar */}
+      <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-70 px-4 py-3 flex justify-between items-center z-10">
+        <h1 className="text-xl font-bold">Virtual Meeting</h1>
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center">
+            <div className={`w-3 h-3 rounded-full mr-2 ${remoteStream ? "bg-green-500" : "bg-gray-500"}`}></div>
+            <span className="text-sm">{remoteStream ? "Connected" : "Disconnected"}</span>
+          </div>
+          <div className="bg-black bg-opacity-40 px-3 py-1 rounded-lg text-sm">
+            ID: {peerId?.substring(0, 6)}
+          </div>
         </div>
       </div>
-      <div className="flex flex-col space-y-4">
-        <div className="flex space-x-2">
-          <button
-            onClick={startCall}
-            className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded transition-colors"
-          >
-            Start Call
-          </button>
+      
+      {/* Main Video Container */}
+      <div className="relative w-full h-[75vh] flex justify-center items-center rounded-xl overflow-hidden shadow-2xl border border-gray-700 bg-gray-900">
+        {/* Remote Video */}
+        {remoteStream ? (
+          <video 
+            ref={remoteVideoRef} 
+            autoPlay 
+            playsInline 
+            className="w-full h-full object-cover" 
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full w-full">
+            <div className="w-24 h-24 rounded-full bg-gray-800 flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <p className="text-gray-400 text-lg">No one has joined yet</p>
+            <p className="text-gray-500 text-sm mt-2">Start call to connect with someone</p>
+          </div>
+        )}
+        
+        {/* Connection ID Overlay */}
+        {connectedPeerId && (
+          <div className="absolute top-4 left-4 bg-black bg-opacity-70 px-3 py-1 rounded-lg text-sm">
+            Connected to: {connectedPeerId.substring(0, 6)}...
+          </div>
+        )}
+        
+        {/* Local Video - Now positioned at bottom right corner */}
+        <div className="absolute bottom-4 right-4 w-32 h-48 md:w-44 md:h-64 rounded-lg overflow-hidden shadow-lg border-2 border-gray-700 bg-gray-900 transition-all duration-300 hover:scale-105">
+          <video 
+            ref={localVideoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className="w-full h-full object-cover" 
+          />
+          <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 py-1 px-2 text-center">
+            <p className="text-xs md:text-sm">You</p>
+          </div>
         </div>
-
-        <div className="flex space-x-2 mt-4">
-          <p className="mr-2">Background:</p>
-          <button
-            onClick={() => setSelectedBackground("/background/office.avif")}
-            className="bg-blue-500 hover:bg-blue-600 px-2 py-1 rounded text-sm transition-colors"
+      </div>
+      
+      {/* Control Bar */}
+      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-gray-900 bg-opacity-90 px-6 py-4 rounded-full shadow-lg border border-gray-700 z-20">
+        {/* Call Button - Conditional Rendering */}
+        {!remoteStream ? (
+          <button 
+            onClick={startCall} 
+            className="bg-green-600 hover:bg-green-700 w-14 h-14 rounded-full flex items-center justify-center transition shadow-lg group relative"
           >
-            Office
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            <span className="absolute -bottom-8 whitespace-nowrap text-sm opacity-0 group-hover:opacity-100 transition-opacity">Start Call</span>
           </button>
-          <button
-            onClick={() => setSelectedBackground("/background/beach.jpg")}
-            className="bg-blue-500 hover:bg-blue-600 px-2 py-1 rounded text-sm transition-colors"
+        ) : (
+          <button 
+            onClick={endCall} 
+            className="bg-red-600 hover:bg-red-700 w-14 h-14 rounded-full flex items-center justify-center transition shadow-lg group relative"
           >
-            Beach
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
+            </svg>
+            <span className="absolute -bottom-8 whitespace-nowrap text-sm opacity-0 group-hover:opacity-100 transition-opacity">End Call</span>
           </button>
-          <button
-            onClick={() => setSelectedBackground("/background/city.jpg")}
-            className="bg-blue-500 hover:bg-blue-600 px-2 py-1 rounded text-sm transition-colors"
-          >
-            City
+        )}
+        
+        {/* Toggle Mic Button */}
+        <button className="bg-gray-700 hover:bg-gray-600 w-12 h-12 rounded-full flex items-center justify-center transition shadow-lg group relative">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          </svg>
+          <span className="absolute -bottom-8 whitespace-nowrap text-sm opacity-0 group-hover:opacity-100 transition-opacity">Toggle Mic</span>
+        </button>
+        
+        {/* Toggle Camera Button */}
+        <button className="bg-gray-700 hover:bg-gray-600 w-12 h-12 rounded-full flex items-center justify-center transition shadow-lg group relative">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <span className="absolute -bottom-8 whitespace-nowrap text-sm opacity-0 group-hover:opacity-100 transition-opacity">Toggle Camera</span>
+        </button>
+        
+        {/* Background Button to Open Selector */}
+        <div className="relative group">
+          <button className="bg-gray-700 hover:bg-gray-600 w-12 h-12 rounded-full flex items-center justify-center transition shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
           </button>
-          <button
-            onClick={() => setSelectedBackground("/background/mountains.avif")}
-            className="bg-blue-500 hover:bg-blue-600 px-2 py-1 rounded text-sm transition-colors"
-          >
-            Mountains
-          </button>
+          <span className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-sm opacity-0 group-hover:opacity-100 transition-opacity">Backgrounds</span>
+          
+          {/* Background Dropdown Panel */}
+          <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-gray-800 bg-opacity-95 rounded-lg p-3 shadow-lg border border-gray-700 w-56 flex-wrap gap-2 hidden group-hover:flex z-30">
+            <p className="w-full text-center text-sm text-gray-300 mb-2">Select Background</p>
+            <button 
+              onClick={() => setSelectedBackground("/background/office.avif")} 
+              className={`w-12 h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/office.avif" ? "ring-2 ring-blue-500" : ""}`}
+            >
+              <div className="w-full h-full bg-gray-700 flex items-center justify-center">🏢</div>
+            </button>
+            <button 
+              onClick={() => setSelectedBackground("/background/beach.jpg")} 
+              className={`w-12 h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/beach.jpg" ? "ring-2 ring-blue-500" : ""}`}
+            >
+              <div className="w-full h-full bg-gray-700 flex items-center justify-center">🏖️</div>
+            </button>
+            <button 
+              onClick={() => setSelectedBackground("/background/city.jpg")} 
+              className={`w-12 h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/city.jpg" ? "ring-2 ring-blue-500" : ""}`}
+            >
+              <div className="w-full h-full bg-gray-700 flex items-center justify-center">🌆</div>
+            </button>
+            <button 
+              onClick={() => setSelectedBackground("/background/mountains.avif")} 
+              className={`w-12 h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/mountains.avif" ? "ring-2 ring-blue-500" : ""}`}
+            >
+              <div className="w-full h-full bg-gray-700 flex items-center justify-center">⛰️</div>
+            </button>
+          </div>
         </div>
+        
+        {/* Settings Button */}
+        <button className="bg-gray-700 hover:bg-gray-600 w-12 h-12 rounded-full flex items-center justify-center transition shadow-lg group relative">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span className="absolute -bottom-8 whitespace-nowrap text-sm opacity-0 group-hover:opacity-100 transition-opacity">Settings</span>
+        </button>
+      </div>
+      
+      {/* Video Call Status Banner - Only shown when active */}
+      {remoteStream && (
+        <div className="absolute top-16 left-4 right-4 bg-green-600 bg-opacity-80 rounded-lg px-4 py-2 text-center shadow-lg flex items-center justify-center space-x-2 md:w-auto md:left-1/2 md:transform md:-translate-x-1/2">
+          <div className="animate-pulse w-3 h-3 bg-white rounded-full"></div>
+          <p className="text-sm font-medium">Call in progress</p>
+        </div>
+      )}
+      
+      {/* Current Background Display */}
+      <div className="absolute top-16 left-4 px-3 py-1 bg-black bg-opacity-60 rounded-lg text-xs text-gray-300">
+        Background: {selectedBackground.split('/').pop()?.split('.')[0] || 'default'}
       </div>
     </div>
   );

@@ -54,21 +54,6 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
-    // newPeer.on("call", (call) => {
-    //   navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-    //     setLocalStream(stream);
-    //     call.answer(stream);
-    //     call.on("stream", (remoteStream) => setRemoteStream(remoteStream));
-    //     call.on("close", () => {
-    //       setRemoteStream(null);
-    //       setMediaConnection(null);
-    //     });
-    //     setMediaConnection(call);
-    //     setIsConnected(true);
-    //     setConnectedPeerId(call.peer);
-    //   });
-    // });
-
     newPeer.on("disconnected", () => newPeer.reconnect());
     newPeer.on("error", (err) => toast({ title: "Peer Error", description: err.message, variant: "destructive" }));
 
@@ -110,33 +95,6 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
     setRemoteStream(null);
     toast({ title: "Disconnected", description: "You have been disconnected." });
   };
-
-// const startCall = (recipientId: string) => {
-//   if (!peer) return;
-//   navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-//     setLocalStream(stream);
-//     const call = peer.call(recipientId, stream);
-//     call.on("stream", (remoteStream) => setRemoteStream(remoteStream));
-//     call.on("close", () => {
-//       setRemoteStream(null);
-//       setMediaConnection(null);
-//     });
-//     setMediaConnection(call);
-//     setIsConnected(true);
-//     setConnectedPeerId(recipientId);
-//   });
-// };
-
-// const endCall = () => {
-//   if (mediaConnection) {
-//     mediaConnection.close();
-//     setMediaConnection(null);
-//   }
-//   localStream?.getTracks().forEach((track) => track.stop());
-//   setLocalStream(null);
-//   setRemoteStream(null);
-//   toast({ title: "Call Ended", description: "The call has been terminated" });
-// };
 
   return (
     <PeerContext.Provider value={{ peer, peerId, isConnected, connectedPeerId, localStream, remoteStream, connection, sendData, connectToPeer, disconnectPeer}}>
