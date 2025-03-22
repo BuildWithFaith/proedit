@@ -6,7 +6,7 @@ import "@tensorflow/tfjs-backend-webgl";
 import { MediaConnection } from "peerjs";
 
 export default function Home() {
-  const { peer, peerId, connectedPeerId, startLocalStream, callPeer, connectionQuality, isConnecting } = usePeer();
+  const { peer, peerId, connectedPeerId } = usePeer();
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [selectedBackground, setSelectedBackground] = useState("/background/office.avif");
   const localVideoRef = useRef<HTMLVideoElement>(null);

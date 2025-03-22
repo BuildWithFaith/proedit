@@ -12,15 +12,12 @@ interface PeerContextType {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   connection: DataConnection | null;
-  connectionQuality: 'good' | 'fair' | 'poor';
   isConnecting: boolean;
   isDisconnecting: boolean;
   sendData: (data: any) => void;
   connectToPeer: (recipientId: string) => void;
   disconnectPeer: () => void;
-  startLocalStream: (constraints?: MediaStreamConstraints) => Promise<void>;
   stopLocalStream: () => void;
-  callPeer: (recipientId: string) => Promise<void>;
   answerCall: () => Promise<void>;
   rejectCall: () => void;
 }
@@ -43,22 +40,10 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
   const [connectedPeerId, setConnectedPeerId] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [connectionQuality, setConnectionQuality] = useState<'good' | 'fair' | 'poor'>('good');
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const MAX_RECONNECT_ATTEMPTS = 5;
 
   const { toast } = useToast();
-
-  const monitorConnectionQuality = (conn: DataConnection) => {
-    const interval = setInterval(() => {
-      if (conn.open) {
-        const quality = conn.label === 'reliable' ? 'good' : 'poor';
-        setConnectionQuality(quality);
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  };
 
   useEffect(() => {
     const newPeer = new Peer();
@@ -71,7 +56,6 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
 
     newPeer.on("connection", (conn) => {
       setConnection(conn);
-      const cleanup = monitorConnectionQuality(conn);
 
       conn.on("open", () => {
         setIsConnected(true);
@@ -93,7 +77,6 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
       });
 
       conn.on("close", () => {
-        cleanup();
         setConnection(null);
         setIsConnected(false);
         setConnectedPeerId(null);
@@ -149,61 +132,10 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const startLocalStream = async (constraints: MediaStreamConstraints = { video: true, audio: true }) => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      setLocalStream(stream);
-      toast({ title: "Local Stream Started", description: "Camera and microphone access granted" });
-    } catch (error) {
-      toast({
-        title: "Media Error",
-        description: "Failed to access camera and microphone",
-        variant: "destructive"
-      });
-      throw error;
-    }
-  };
-
   const stopLocalStream = () => {
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
       setLocalStream(null);
-    }
-  };
-
-  const callPeer = async (recipientId: string) => {
-    if (!peer || !localStream) {
-      toast({
-        title: "Call Failed",
-        description: "Please start your camera first",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      setIsConnecting(true);
-      const call = peer.call(recipientId, localStream);
-      setMediaConnection(call);
-
-      call.on("stream", (stream) => {
-        setRemoteStream(stream);
-        setIsConnecting(false);
-        toast({ title: "Call Connected", description: "Remote stream received" });
-      });
-
-      call.on("close", () => {
-        setMediaConnection(null);
-        setRemoteStream(null);
-        setIsConnecting(false);
-      });
-    } catch (error) {
-      setIsConnecting(false);
-      toast({
-        title: "Call Failed",
-        description: "Failed to establish call",
-        variant: "destructive"
-      });
     }
   };
 
@@ -303,13 +235,10 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
         localStream,
         remoteStream,
         connection,
-        connectionQuality,
         sendData,
         connectToPeer,
         disconnectPeer,
-        startLocalStream,
         stopLocalStream,
-        callPeer,
         answerCall,
         rejectCall
       }}
