@@ -11,6 +11,7 @@ export default function Home() {
   const [selectedBackground, setSelectedBackground] = useState("/background/office.avif");
   const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [activeCall, setActiveCall] = useState<MediaConnection | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -56,14 +57,31 @@ export default function Home() {
     }
   }, [remoteStream, localStream, canvasRef.current, backgroundRemovalEnabled]);
 
-  // Add this useEffect to initialize the local stream when the component mounts
+  // Add this effect to handle background removal toggle changes
   useEffect(() => {
-    if (!localStream) {
-      getProcessedStream().catch(err => {
-        console.error("Error initializing local stream:", err);
-      });
+    // Skip if no existing stream
+    if (!localStream) return;
+
+    console.log("Background removal setting changed, updating streams...");
+
+    // Stop current streams first
+    const videoToStop = localVideoRef.current?.srcObject as MediaStream;
+    if (videoToStop) {
+      videoToStop.getTracks().forEach(track => track.stop());
     }
-  }, []);
+
+    // Get new processed stream with updated background removal setting
+    getProcessedStream()
+      .then(newStream => {
+        // If we have an active call, update its track
+        if (activeCall) {
+          updateRemoteStream(newStream);
+        }
+      })
+      .catch(err => {
+        console.error("Error reinitializing stream after background toggle:", err);
+      });
+  }, [backgroundRemovalEnabled, selectedBackground, activeCall]);
 
   useEffect(() => {
     // Preload the selected background
@@ -211,6 +229,24 @@ export default function Home() {
   };
 
   const getProcessedStream = async (): Promise<MediaStream> => {
+
+    // Add this at the beginning of getProcessedStream
+    if (glRef.current) {
+      const gl = glRef.current;
+
+      // Clean up existing textures
+      if (videoTextureRef.current) gl.deleteTexture(videoTextureRef.current);
+      if (maskTextureRef.current) gl.deleteTexture(maskTextureRef.current);
+
+      // Delete existing program
+      if (programRef.current) {
+        gl.deleteProgram(programRef.current);
+        programRef.current = null;
+      }
+
+      glRef.current = null;
+    }
+
     // Request user media
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: 640, height: 480 },
@@ -388,6 +424,14 @@ export default function Home() {
     // Draw the WebGL canvas (with transparent background and foreground subject) on top
     outputCtx.drawImage(glCanvas, 0, 0);
 
+    // Add this in renderFrame function after compositing background
+    console.log(`Rendering frame with background: ${backgroundRemovalEnabled ? selectedBackground : 'none'}`);
+    if (backgroundImageRef.current) {
+      console.log(`Background image dimensions: ${backgroundImageRef.current.width}x${backgroundImageRef.current.height}`);
+    } else if (backgroundRemovalEnabled) {
+      console.error("Background image not loaded!");
+    }
+
     // Continue rendering
     requestAnimationFrame(() => renderFrame(glCanvas, outputCanvas));
   };
@@ -405,6 +449,7 @@ export default function Home() {
 
       console.log("📞 Calling peer:", connectedPeerId);
       const call = peer.call(connectedPeerId, processedStream);
+      setActiveCall(call); // Store the call reference
 
       call.on("stream", (incomingStream) => {
         console.log("🎬 Received Remote Stream:", incomingStream);
@@ -424,6 +469,42 @@ export default function Home() {
     }
   };
 
+  const updateRemoteStream = async (newStream: MediaStream) => {
+    if (!activeCall || !activeCall.peerConnection) {
+      console.log("No active call to update");
+      return;
+    }
+
+    try {
+      const videoTrack = newStream.getVideoTracks()[0];
+
+      if (!videoTrack) {
+        console.error("No video track in new stream");
+        return;
+      }
+
+      console.log("Replacing video track in active connection");
+
+      // Get all senders in the peer connection
+      const senders = activeCall.peerConnection.getSenders();
+
+      // Find the video sender
+      const videoSender = senders.find(sender =>
+        sender.track && sender.track.kind === 'video'
+      );
+
+      if (videoSender) {
+        // Replace the track
+        await videoSender.replaceTrack(videoTrack);
+        console.log("✅ Remote video track replaced successfully");
+      } else {
+        console.error("No video sender found in peer connection");
+      }
+    } catch (error) {
+      console.error("Error updating remote stream:", error);
+    }
+  };
+
   useEffect(() => {
     if (!peer) return;
 
@@ -435,6 +516,7 @@ export default function Home() {
         console.log("🎥 Processed Stream for Auto-Answering:", processedStream);
 
         incomingCall.answer(processedStream);
+        setActiveCall(incomingCall); // Store the call reference
         console.log("✅ Auto-Answered the call");
 
         incomingCall.on("stream", (incomingStream: MediaStream) => {
@@ -489,6 +571,8 @@ export default function Home() {
 
   const endCall = () => {
     console.log("📞 Ending call...");
+
+    setActiveCall(null);
 
     // 1. Get references to all connections first
     const currentPeer = peer;
