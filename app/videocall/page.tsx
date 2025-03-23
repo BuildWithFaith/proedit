@@ -12,6 +12,8 @@ export default function Home() {
   const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [activeCall, setActiveCall] = useState<MediaConnection | null>(null);
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -253,9 +255,20 @@ export default function Home() {
       audio: true
     });
 
+    const originalAudioTrack = stream.getAudioTracks()[0];
+
     // If background removal is disabled, store and return the raw stream
     if (!backgroundRemovalEnabled) {
       setLocalStream(stream);
+
+      // Apply current audio/video state
+      if (isAudioMuted && stream) {
+        const audioTracks = stream.getAudioTracks();
+        audioTracks.forEach(track => {
+          track.enabled = !isAudioMuted;
+        });
+      }
+
       return stream;
     }
 
@@ -308,12 +321,18 @@ export default function Home() {
 
     // Capture stream and add audio
     const outputStream = outputCanvas.captureStream(30);
-    const audioTrack = stream.getAudioTracks()[0];
-    if (audioTrack) {
-      outputStream.addTrack(audioTrack);
+    if (originalAudioTrack) {
+      outputStream.addTrack(originalAudioTrack);
+
+      // Apply current audio mute state
+      originalAudioTrack.enabled = !isAudioMuted;
+      console.log(`Audio track added to output stream. Muted: ${isAudioMuted}`);
+    } else {
+      console.warn("No audio track available to add to the processed stream");
     }
 
     setLocalStream(outputStream);
+
     return outputStream;
   };
 
@@ -442,6 +461,18 @@ export default function Home() {
     try {
       const processedStream = await getProcessedStream();
 
+      // Log audio tracks
+      const audioTracks = processedStream.getAudioTracks();
+      console.log(`Audio tracks in outgoing stream: ${audioTracks.length}`);
+
+      if (audioTracks.length > 0) {
+        // Make sure audio state is correctly applied
+        audioTracks[0].enabled = !isAudioMuted;
+        console.log(`Audio track enabled for call: ${!isAudioMuted}`);
+      } else {
+        console.warn("No audio tracks in outgoing stream!");
+      }
+
       console.log("🎥 Setting local video stream...");
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = processedStream;
@@ -453,6 +484,11 @@ export default function Home() {
 
       call.on("stream", (incomingStream) => {
         console.log("🎬 Received Remote Stream:", incomingStream);
+
+        // Log audio tracks in incoming stream
+        const incomingAudioTracks = incomingStream.getAudioTracks();
+        console.log(`Incoming stream audio tracks: ${incomingAudioTracks.length}`);
+
         setRemoteStream(incomingStream);
       });
 
@@ -477,18 +513,19 @@ export default function Home() {
 
     try {
       const videoTrack = newStream.getVideoTracks()[0];
+      const audioTrack = newStream.getAudioTracks()[0];
 
       if (!videoTrack) {
         console.error("No video track in new stream");
         return;
       }
 
-      console.log("Replacing video track in active connection");
+      console.log("Replacing tracks in active connection");
 
       // Get all senders in the peer connection
       const senders = activeCall.peerConnection.getSenders();
 
-      // Find the video sender
+      // Find the video sender and update it
       const videoSender = senders.find(sender =>
         sender.track && sender.track.kind === 'video'
       );
@@ -500,8 +537,57 @@ export default function Home() {
       } else {
         console.error("No video sender found in peer connection");
       }
+
+      // Find and update audio sender if it exists and we have an audio track
+      if (audioTrack) {
+        const audioSender = senders.find(sender =>
+          sender.track && sender.track.kind === 'audio'
+        );
+
+        if (audioSender) {
+          await audioSender.replaceTrack(audioTrack);
+          // Apply current mute state
+          audioTrack.enabled = !isAudioMuted;
+          console.log("✅ Remote audio track replaced successfully");
+        }
+      }
     } catch (error) {
       console.error("Error updating remote stream:", error);
+    }
+  };
+
+  const toggleAudio = () => {
+    if (localStream) {
+      const audioTracks = localStream.getAudioTracks();
+      audioTracks.forEach(track => {
+        track.enabled = isAudioMuted;
+      });
+
+      // Also update audio in the active call if it exists
+      if (activeCall && activeCall.peerConnection) {
+        const senders = activeCall.peerConnection.getSenders();
+        const audioSender = senders.find(sender =>
+          sender.track && sender.track.kind === 'audio'
+        );
+
+        if (audioSender && audioSender.track) {
+          audioSender.track.enabled = isAudioMuted;
+        }
+      }
+
+      setIsAudioMuted(!isAudioMuted);
+      console.log(`🎤 Audio ${isAudioMuted ? 'unmuted' : 'muted'}`);
+    }
+  };
+
+  const toggleVideo = () => {
+    if (localStream) {
+      const videoTracks = localStream.getVideoTracks();
+      videoTracks.forEach(track => {
+        track.enabled = !isVideoEnabled;
+      });
+      setIsVideoEnabled(!isVideoEnabled);
+      console.log(`📹 Video ${isVideoEnabled ? 'disabled' : 'enabled'}`);
     }
   };
 
@@ -515,12 +601,27 @@ export default function Home() {
         const processedStream = await getProcessedStream();
         console.log("🎥 Processed Stream for Auto-Answering:", processedStream);
 
+        // Check if we have audio tracks
+        const audioTracks = processedStream.getAudioTracks();
+        console.log(`Audio tracks in processed stream: ${audioTracks.length}`);
+
+        if (audioTracks.length > 0) {
+          // Ensure audio track is enabled unless explicitly muted
+          audioTracks[0].enabled = !isAudioMuted;
+          console.log(`Audio track enabled: ${!isAudioMuted}`);
+        }
+
         incomingCall.answer(processedStream);
         setActiveCall(incomingCall); // Store the call reference
         console.log("✅ Auto-Answered the call");
 
         incomingCall.on("stream", (incomingStream: MediaStream) => {
           console.log("🎬 Receiving Remote Video Stream:", incomingStream);
+
+          // Log audio tracks in incoming stream
+          const incomingAudioTracks = incomingStream.getAudioTracks();
+          console.log(`Incoming stream audio tracks: ${incomingAudioTracks.length}`);
+
           setRemoteStream(incomingStream);
         });
 
@@ -538,7 +639,7 @@ export default function Home() {
     return () => {
       peer.off("call", handleIncomingCall);
     };
-  }, [peer]);
+  }, [peer, isAudioMuted]); // Add isAudioMuted as a dependency
 
   const preloadImages = (imagePaths: string[]) => {
     return Promise.all(
@@ -675,6 +776,9 @@ export default function Home() {
       net = null;
     }
 
+    setIsAudioMuted(false);
+    setIsVideoEnabled(true);
+
     console.log("✅ Call ended successfully");
   };
 
@@ -732,6 +836,16 @@ export default function Home() {
             muted
             className="w-full h-full object-cover"
           />
+
+          {!isVideoEnabled && (
+            <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />
+              </svg>
+            </div>
+          )}
+
           <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 py-1 px-2 text-center">
             <p className="text-xs sm:text-sm">You</p>
           </div>
@@ -763,19 +877,30 @@ export default function Home() {
           </button>
         )}
 
-        {/* Control Buttons - Responsive sizing */}
-        <button className="bg-gray-700 hover:bg-gray-600 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition shadow-lg group relative">
+        {/* Audio Control Button */}
+        <button
+          onClick={toggleAudio}
+          className={`${isAudioMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'} w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition shadow-lg group relative`}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isAudioMuted
+              ? "M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+              : "M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"} />
+            {isAudioMuted && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />}
           </svg>
-          <span className="absolute -bottom-6 sm:-bottom-8 whitespace-nowrap text-xs sm:text-sm opacity-0 group-hover:opacity-100 transition-opacity">Toggle Mic</span>
+          <span className="absolute -bottom-6 sm:-bottom-8 whitespace-nowrap text-xs sm:text-sm opacity-0 group-hover:opacity-100 transition-opacity">{isAudioMuted ? 'Unmute' : 'Mute'}</span>
         </button>
 
-        <button className="bg-gray-700 hover:bg-gray-600 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition shadow-lg group relative">
+        {/* Video Control Button */}
+        <button
+          onClick={toggleVideo}
+          className={`${!isVideoEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'} w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition shadow-lg group relative`}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            {!isVideoEnabled && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />}
           </svg>
-          <span className="absolute -bottom-6 sm:-bottom-8 whitespace-nowrap text-xs sm:text-sm opacity-0 group-hover:opacity-100 transition-opacity">Toggle Camera</span>
+          <span className="absolute -bottom-6 sm:-bottom-8 whitespace-nowrap text-xs sm:text-sm opacity-0 group-hover:opacity-100 transition-opacity">{isVideoEnabled ? 'Turn Off Camera' : 'Turn On Camera'}</span>
         </button>
 
         {/* Background Button - Responsive dropdown */}
@@ -832,15 +957,6 @@ export default function Home() {
             )}
           </div>
         </div>
-
-        {/* Settings Button - Responsive sizing */}
-        <button className="bg-gray-700 hover:bg-gray-600 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition shadow-lg group relative">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <span className="absolute -bottom-6 sm:-bottom-8 whitespace-nowrap text-xs sm:text-sm opacity-0 group-hover:opacity-100 transition-opacity">Settings</span>
-        </button>
       </div>
 
       {/* Video Call Status Banner - Responsive positioning */}
