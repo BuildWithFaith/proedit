@@ -10,6 +10,8 @@ export default function Home() {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [selectedBackground, setSelectedBackground] = useState("/background/office.avif");
   const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [activeCall, setActiveCall] = useState<MediaConnection | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
@@ -84,6 +86,20 @@ export default function Home() {
         console.error("Error reinitializing stream after background toggle:", err);
       });
   }, [backgroundRemovalEnabled, selectedBackground, activeCall]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     // Preload the selected background
@@ -903,17 +919,31 @@ export default function Home() {
           <span className="absolute -bottom-6 sm:-bottom-8 whitespace-nowrap text-xs sm:text-sm opacity-0 group-hover:opacity-100 transition-opacity">{isVideoEnabled ? 'Turn Off Camera' : 'Turn On Camera'}</span>
         </button>
 
-        {/* Background Button - Responsive dropdown */}
-        <div className="relative group">
-          <button className="bg-gray-700 hover:bg-gray-600 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition shadow-lg">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </button>
-          <span className="absolute -bottom-6 sm:-bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs sm:text-sm opacity-0 group-hover:opacity-100 transition-opacity">Backgrounds</span>
+        {/* Background Button - Responsive dropdown with improved hover persistence */}
+        <div className="relative" ref={dropdownRef}>
+          {/* Button and label container */}
+          <div className="flex flex-col items-center group">
+            <button
+              className="bg-gray-700 hover:bg-gray-600 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition shadow-lg relative"
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
 
-          {/* Background Dropdown Panel - Improved mobile layout */}
-          <div className="absolute bottom-14 sm:bottom-16 left-1/2 transform -translate-x-1/2 bg-gray-800 bg-opacity-95 rounded-lg p-2 sm:p-3 shadow-lg border border-gray-700 w-48 sm:w-56 flex-wrap gap-1 sm:gap-2 hidden group-hover:flex z-30">
+              {/* Hover label - positioned below the button */}
+              <div className="absolute top-full mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+                <span className="bg-gray-800 text-white text-xs py-1 px-2 rounded shadow-lg">
+                  Background
+                </span>
+              </div>
+            </button>
+          </div>
+
+          {/* Background Dropdown Panel - Using state instead of hover */}
+          <div
+            className={`absolute bottom-20 sm:bottom-24 left-1/2 transform -translate-x-1/2 bg-gray-800 bg-opacity-95 rounded-lg p-2 sm:p-3 shadow-lg border border-gray-700 w-48 sm:w-56 flex flex-wrap gap-1 sm:gap-2 z-30 transition-opacity duration-200 ${dropdownOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
+          >
             <p className="w-full text-center text-xs sm:text-sm text-gray-300 mb-1 sm:mb-2">Select Background</p>
 
             {/* Background removal toggle */}
