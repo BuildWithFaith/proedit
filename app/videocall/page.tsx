@@ -9,6 +9,8 @@ export default function Home() {
   const { peer, peerId, connectedPeerId } = usePeer();
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [selectedBackground, setSelectedBackground] = useState("/background/office.avif");
+  const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,13 +41,29 @@ export default function Home() {
   });
 
   useEffect(() => {
-    if (localVideoRef.current && canvasRef.current) {
-      localVideoRef.current.srcObject = canvasRef.current.captureStream(30) || null;
+    // Set the local video source
+    if (localVideoRef.current) {
+      if (backgroundRemovalEnabled && canvasRef.current) {
+        localVideoRef.current.srcObject = canvasRef.current.captureStream(30) || null;
+      } else if (localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
     }
+
+    // Set the remote video source
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
     }
-  }, [remoteStream, canvasRef.current]);
+  }, [remoteStream, localStream, canvasRef.current, backgroundRemovalEnabled]);
+
+  // Add this useEffect to initialize the local stream when the component mounts
+  useEffect(() => {
+    if (!localStream) {
+      getProcessedStream().catch(err => {
+        console.error("Error initializing local stream:", err);
+      });
+    }
+  }, []);
 
   useEffect(() => {
     // Preload the selected background
@@ -199,7 +217,13 @@ export default function Home() {
       audio: true
     });
 
-    // Set up video element
+    // If background removal is disabled, store and return the raw stream
+    if (!backgroundRemovalEnabled) {
+      setLocalStream(stream);
+      return stream;
+    }
+
+    // Set up video element for background removal processing
     videoElement.current = document.createElement("video");
     videoElement.current.srcObject = stream;
     videoElement.current.autoplay = true;
@@ -253,6 +277,7 @@ export default function Home() {
       outputStream.addTrack(audioTrack);
     }
 
+    setLocalStream(outputStream);
     return outputStream;
   };
 
@@ -527,7 +552,7 @@ export default function Home() {
     }
 
     // Stop canvas stream
-    if (currentCanvas) {
+    if (backgroundRemovalEnabled && currentCanvas) {
       try {
         const canvasStream = currentCanvas.captureStream();
         stopAllTracksFromStream(canvasStream);
@@ -540,8 +565,8 @@ export default function Home() {
     // 4. Reset global state
     setRemoteStream(null);
 
-    // 5. Clean up WebGL resources
-    if (glRef.current) {
+    // 5. Clean up WebGL resources if background removal was enabled
+    if (backgroundRemovalEnabled && glRef.current) {
       try {
         const gl = glRef.current;
 
@@ -561,8 +586,10 @@ export default function Home() {
       }
     }
 
-    // 6. Reset BodyPix model
-    net = null;
+    // 6. Reset BodyPix model if it was loaded
+    if (backgroundRemovalEnabled) {
+      net = null;
+    }
 
     console.log("✅ Call ended successfully");
   };
@@ -679,30 +706,46 @@ export default function Home() {
           {/* Background Dropdown Panel - Improved mobile layout */}
           <div className="absolute bottom-14 sm:bottom-16 left-1/2 transform -translate-x-1/2 bg-gray-800 bg-opacity-95 rounded-lg p-2 sm:p-3 shadow-lg border border-gray-700 w-48 sm:w-56 flex-wrap gap-1 sm:gap-2 hidden group-hover:flex z-30">
             <p className="w-full text-center text-xs sm:text-sm text-gray-300 mb-1 sm:mb-2">Select Background</p>
-            <button
-              onClick={() => setSelectedBackground("/background/office.avif")}
-              className={`w-10 h-10 sm:w-12 sm:h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/office.avif" ? "ring-2 ring-blue-500" : ""}`}
-            >
-              <div className="w-full h-full bg-gray-700 flex items-center justify-center text-sm sm:text-base">🏢</div>
-            </button>
-            <button
-              onClick={() => setSelectedBackground("/background/beach.jpg")}
-              className={`w-10 h-10 sm:w-12 sm:h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/beach.jpg" ? "ring-2 ring-blue-500" : ""}`}
-            >
-              <div className="w-full h-full bg-gray-700 flex items-center justify-center text-sm sm:text-base">🏖️</div>
-            </button>
-            <button
-              onClick={() => setSelectedBackground("/background/city.jpg")}
-              className={`w-10 h-10 sm:w-12 sm:h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/city.jpg" ? "ring-2 ring-blue-500" : ""}`}
-            >
-              <div className="w-full h-full bg-gray-700 flex items-center justify-center text-sm sm:text-base">🌆</div>
-            </button>
-            <button
-              onClick={() => setSelectedBackground("/background/mountains.avif")}
-              className={`w-10 h-10 sm:w-12 sm:h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/mountains.avif" ? "ring-2 ring-blue-500" : ""}`}
-            >
-              <div className="w-full h-full bg-gray-700 flex items-center justify-center text-sm sm:text-base">⛰️</div>
-            </button>
+
+            {/* Background removal toggle */}
+            <div className="w-full flex items-center justify-between px-1 mb-2">
+              <span className="text-xs sm:text-sm text-gray-300">Background Removal</span>
+              <button
+                onClick={() => setBackgroundRemovalEnabled(prev => !prev)}
+                className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors ${backgroundRemovalEnabled ? 'bg-blue-600 justify-end' : 'bg-gray-600 justify-start'}`}
+              >
+                <div className="w-4 h-4 bg-white rounded-full"></div>
+              </button>
+            </div>
+
+            {backgroundRemovalEnabled && (
+              <>
+                <button
+                  onClick={() => setSelectedBackground("/background/office.avif")}
+                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/office.avif" ? "ring-2 ring-blue-500" : ""}`}
+                >
+                  <div className="w-full h-full bg-gray-700 flex items-center justify-center text-sm sm:text-base">🏢</div>
+                </button>
+                <button
+                  onClick={() => setSelectedBackground("/background/beach.jpg")}
+                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/beach.jpg" ? "ring-2 ring-blue-500" : ""}`}
+                >
+                  <div className="w-full h-full bg-gray-700 flex items-center justify-center text-sm sm:text-base">🏖️</div>
+                </button>
+                <button
+                  onClick={() => setSelectedBackground("/background/city.jpg")}
+                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/city.jpg" ? "ring-2 ring-blue-500" : ""}`}
+                >
+                  <div className="w-full h-full bg-gray-700 flex items-center justify-center text-sm sm:text-base">🌆</div>
+                </button>
+                <button
+                  onClick={() => setSelectedBackground("/background/mountains.avif")}
+                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-md overflow-hidden flex-shrink-0 ${selectedBackground === "/background/mountains.avif" ? "ring-2 ring-blue-500" : ""}`}
+                >
+                  <div className="w-full h-full bg-gray-700 flex items-center justify-center text-sm sm:text-base">⛰️</div>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -726,7 +769,9 @@ export default function Home() {
 
       {/* Current Background Display - Responsive text */}
       <div className="absolute top-14 sm:top-16 left-2 sm:left-4 px-2 sm:px-3 py-1 bg-black bg-opacity-60 rounded-lg text-xs sm:text-sm text-gray-300">
-        Background: {selectedBackground.split('/').pop()?.split('.')[0] || 'default'}
+        {backgroundRemovalEnabled
+          ? `Background: ${selectedBackground.split('/').pop()?.split('.')[0] || 'default'}`
+          : 'Background removal: Off'}
       </div>
     </div>
   );
