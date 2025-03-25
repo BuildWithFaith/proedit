@@ -1,4 +1,5 @@
 import type { RefObject } from "react"
+import { VideoIcon, VideoOffIcon } from "lucide-react"
 
 interface VideoDisplayProps {
     remoteStream: MediaStream | null
@@ -6,6 +7,8 @@ interface VideoDisplayProps {
     localVideoRef: RefObject<HTMLVideoElement | null>
     connectedPeerId: string | null
     isVideoEnabled: boolean
+    isLoading: boolean
+    callStatus: "idle" | "connecting" | "connected" | "ending"
 }
 
 export default function VideoDisplay({
@@ -14,71 +17,45 @@ export default function VideoDisplay({
     localVideoRef,
     connectedPeerId,
     isVideoEnabled,
+    isLoading,
+    callStatus,
 }: VideoDisplayProps) {
     return (
-        <div className="relative w-full h-[60vh] sm:h-[70vh] md:h-[75vh] flex justify-center items-center rounded-xl overflow-hidden shadow-2xl border border-gray-700 bg-gray-900 mt-12 sm:mt-16">
+        <div className="relative bg-white rounded-lg shadow-md overflow-hidden">
             {/* Remote Video */}
-            {remoteStream ? (
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-            ) : (
-                <div className="flex flex-col items-center justify-center h-full w-full p-4">
-                    <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-gray-800 flex items-center justify-center mb-2 sm:mb-4">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-8 w-8 sm:h-12 sm:w-12 text-gray-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                        </svg>
-                    </div>
-                    <p className="text-gray-400 text-base sm:text-lg text-center">No one has joined yet</p>
-                    <p className="text-gray-500 text-xs sm:text-sm mt-1 sm:mt-2 text-center">
-                        Start call to connect with someone
-                    </p>
-                </div>
-            )}
-
-            {/* Connection ID Overlay */}
-            {connectedPeerId && (
-                <div className="absolute top-2 sm:top-4 left-2 sm:left-4 bg-black bg-opacity-70 px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm">
-                    Connected to: {connectedPeerId.substring(0, 6)}...
-                </div>
-            )}
-
-            {/* Local Video */}
-            <div className="absolute bottom-2 sm:bottom-4 right-2 sm:right-4 w-24 h-36 sm:w-32 sm:h-48 md:w-44 md:h-64 rounded-lg overflow-hidden shadow-lg border-2 border-gray-700 bg-gray-900 transition-all duration-300 hover:scale-105">
-                <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-
-                {!isVideoEnabled && (
-                    <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-8 w-8 text-gray-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                            />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />
-                        </svg>
+            <div className="aspect-video w-full relative">
+                {remoteStream ? (
+                    <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center">
+                        <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mb-4">
+                            <VideoIcon className="w-10 h-10 text-gray-400" />
+                        </div>
+                        <p className="text-gray-500 font-medium">Waiting for participant to join...</p>
                     </div>
                 )}
 
-                <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 py-1 px-2 text-center">
-                    <p className="text-xs sm:text-sm">You</p>
+                {/* Local Video (PiP) */}
+                <div className="absolute top-4 left-4 w-[180px] aspect-[4/3] bg-gray-200 rounded-lg overflow-hidden shadow-md border-2 border-white">
+                    <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                    {!isVideoEnabled && (
+                        <div className="absolute inset-0 bg-gray-800 bg-opacity-70 flex flex-col items-center justify-center">
+                            <VideoOffIcon className="h-8 w-8 text-white opacity-80 mb-1" />
+                            <p className="text-xs text-white">Camera off</p>
+                        </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 py-1 px-2">
+                        <p className="text-white text-xs text-center">You</p>
+                    </div>
                 </div>
+
+                {/* Remote User Info */}
+                {remoteStream && (
+                    <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white text-xs py-1 px-3 rounded-full flex items-center">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                        <span>{connectedPeerId ? `${connectedPeerId.substring(0, 6)}...` : "Connected"}</span>
+                    </div>
+                )}
             </div>
         </div>
     )

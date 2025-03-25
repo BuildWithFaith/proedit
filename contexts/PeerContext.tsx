@@ -13,6 +13,7 @@ interface PeerContextType {
   connectToPeer: (recipientId: string) => void;
   disconnectPeer: () => void;
   sendData: (data: any) => void;
+  setConnectedPeerId: (id: string | null) => void
 }
 
 const PeerContext = createContext<PeerContextType | undefined>(undefined);
@@ -125,7 +126,8 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
         connection,
         connectToPeer,
         disconnectPeer,
-        sendData
+        sendData,
+        setConnectedPeerId
       }}
     >
       {children}

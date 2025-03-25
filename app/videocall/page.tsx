@@ -2,12 +2,14 @@
 import { useState, useEffect, useRef } from "react"
 import { usePeer } from "@/contexts/PeerContext"
 import type { MediaConnection } from "peerjs"
-import VideoDisplay from "@/components/video-display"
 import ControlBar from "@/components/control-bar"
 import BackgroundProcessor from "@/components/background-processor"
+import { ArrowLeft, MoreVertical, Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export default function Home() {
-  const { peer, peerId, connectedPeerId } = usePeer()
+  const router = useRouter()
+  const { peer, peerId, connectedPeerId, setConnectedPeerId } = usePeer()
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [selectedBackground, setSelectedBackground] = useState("/background/office.avif")
   const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false)
@@ -15,6 +17,11 @@ export default function Home() {
   const [activeCall, setActiveCall] = useState<MediaConnection | null>(null)
   const [isAudioMuted, setIsAudioMuted] = useState(false)
   const [isVideoEnabled, setIsVideoEnabled] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [callStatus, setCallStatus] = useState<"idle" | "connecting" | "connected" | "ending">("idle")
+  const [callDuration, setCallDuration] = useState(0)
+  const [callStartTime, setCallStartTime] = useState<number | null>(null)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -48,12 +55,44 @@ export default function Home() {
     }
   }, [remoteStream, localStream, backgroundRemovalEnabled])
 
+  // Handle call timer
+  useEffect(() => {
+    if (callStatus === "connected" && !callStartTime) {
+      setCallStartTime(Date.now())
+
+      timerRef.current = setInterval(() => {
+        setCallDuration(Math.floor((Date.now() - (callStartTime || Date.now())) / 1000))
+      }, 1000)
+    } else if (callStatus !== "connected") {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      setCallStartTime(null)
+      setCallDuration(0)
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+    }
+  }, [callStatus, callStartTime])
+
+  // Format call duration as MM:SS
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
+
   // Handle background removal toggle changes
   useEffect(() => {
     // Skip if no existing stream
     if (!localStream) return
 
     console.log("Background removal setting changed, updating streams...")
+    setIsLoading(true)
 
     // Stop current streams first
     const videoToStop = localVideoRef.current?.srcObject as MediaStream
@@ -68,9 +107,11 @@ export default function Home() {
         if (activeCall) {
           updateRemoteStream(newStream)
         }
+        setIsLoading(false)
       })
       .catch((err) => {
         console.error("Error reinitializing stream after background toggle:", err)
+        setIsLoading(false)
       })
   }, [backgroundRemovalEnabled, selectedBackground, activeCall])
 
@@ -80,6 +121,8 @@ export default function Home() {
 
     const handleIncomingCall = async (incomingCall: MediaConnection) => {
       console.log("📞 Incoming call from:", incomingCall.peer)
+      setCallStatus("connecting")
+      setIsLoading(true)
 
       try {
         const processedStream = await getProcessedStream()
@@ -107,14 +150,19 @@ export default function Home() {
           console.log(`Incoming stream audio tracks: ${incomingAudioTracks.length}`)
 
           setRemoteStream(incomingStream)
+          setCallStatus("connected")
+          setIsLoading(false)
         })
 
         incomingCall.on("close", () => {
           console.log("❌ Call Ended")
           setRemoteStream(null)
+          setCallStatus("idle")
         })
       } catch (error) {
         console.error("Error handling incoming call:", error)
+        setCallStatus("idle")
+        setIsLoading(false)
       }
     }
 
@@ -246,6 +294,9 @@ export default function Home() {
   const startCall = async () => {
     if (!peer || !connectedPeerId) return
 
+    setCallStatus("connecting")
+    setIsLoading(true)
+
     try {
       const processedStream = await getProcessedStream()
 
@@ -278,24 +329,33 @@ export default function Home() {
         console.log(`Incoming stream audio tracks: ${incomingAudioTracks.length}`)
 
         setRemoteStream(incomingStream)
+        setCallStatus("connected")
+        setIsLoading(false)
       })
 
       call.on("error", (err) => {
         console.error("Call error:", err)
+        setCallStatus("idle")
+        setIsLoading(false)
       })
 
       call.on("close", () => {
         console.log("Call closed")
         setRemoteStream(null)
+        setCallStatus("idle")
       })
     } catch (error) {
       console.error("Error starting call:", error)
+      setCallStatus("idle")
+      setIsLoading(false)
     }
   }
 
   // End a call
   const endCall = () => {
     console.log("📞 Ending call...")
+    setCallStatus("ending")
+    setIsLoading(true)
 
     // First, stop the background processor rendering loop
     if (backgroundRemovalEnabled) {
@@ -378,6 +438,8 @@ export default function Home() {
 
     setIsAudioMuted(false)
     setIsVideoEnabled(true)
+    setCallStatus("idle")
+    setIsLoading(false)
 
     console.log("✅ Call ended successfully")
   }
@@ -418,61 +480,170 @@ export default function Home() {
   }
 
   return (
-    <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black transition-all duration-300 flex flex-col items-center justify-center text-white min-h-screen p-2 sm:p-4 md:p-6">
-      {/* Status Bar */}
-      <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-70 px-2 sm:px-4 py-2 sm:py-3 flex justify-between items-center z-10">
-        <h1 className="text-lg sm:text-xl font-bold">Virtual Meeting</h1>
-        <div className="flex items-center space-x-2">
-          <div className="flex items-center">
-            <div
-              className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full mr-1 sm:mr-2 ${remoteStream ? "bg-green-500" : "bg-gray-500"}`}
-            ></div>
-            <span className="text-xs sm:text-sm">{remoteStream ? "Connected" : "Disconnected"}</span>
+    <div className="bg-white min-h-screen flex flex-col">
+      {/* Header
+      <header className="border-b border-gray-200 bg-white">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-10 h-10 bg-blue-600 rounded-md flex items-center justify-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-6 h-6 text-white"
+              >
+                <path d="M4 6h16v12H4z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="font-semibold text-gray-900">Business Video Call</h1>
+              <p className="text-xs text-gray-500">March 24, 2025 | Virtual Meeting</p>
+            </div>
           </div>
-          <div className="bg-black bg-opacity-40 px-2 sm:px-3 py-1 rounded-lg text-xs sm:text-sm">
-            ID: {peerId?.substring(0, 6)}
+
+          <nav className="hidden md:flex items-center space-x-8">
+            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
+              Home
+            </a>
+            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
+              Agenda
+            </a>
+            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
+              Speakers
+            </a>
+            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
+              Companies
+            </a>
+            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
+              Participants
+            </a>
+            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
+              Marketplace
+            </a>
+          </nav>
+
+          <div className="flex items-center space-x-4">
+            <button className="p-2 rounded-full hover:bg-gray-100">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-5 h-5 text-gray-700"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            </button>
+            <button className="p-2 rounded-full hover:bg-gray-100 relative">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-5 h-5 text-gray-700"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+                />
+              </svg>
+              <span className="absolute top-1 right-1 w-2 h-2 bg-blue-600 rounded-full"></span>
+            </button>
+            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
+              <img src="/placeholder.svg?height=32&width=32" alt="Profile" className="w-full h-full object-cover" />
+            </div>
           </div>
         </div>
-      </div>
+      </header> */}
 
-      {/* Video Display Component */}
-      <VideoDisplay
-        remoteStream={remoteStream}
-        remoteVideoRef={remoteVideoRef}
-        localVideoRef={localVideoRef}
-        connectedPeerId={connectedPeerId}
-        isVideoEnabled={isVideoEnabled}
-      />
+      {/* Main Content */}
+      <main className="flex-1 py-4">
+        <div className="container mx-auto px-4">
 
-      {/* Control Bar Component */}
-      <ControlBar
-        remoteStream={remoteStream}
-        startCall={startCall}
-        endCall={endCall}
-        isAudioMuted={isAudioMuted}
-        toggleAudio={toggleAudio}
-        isVideoEnabled={isVideoEnabled}
-        toggleVideo={toggleVideo}
-        backgroundRemovalEnabled={backgroundRemovalEnabled}
-        setBackgroundRemovalEnabled={setBackgroundRemovalEnabled}
-        selectedBackground={selectedBackground}
-        setSelectedBackground={setSelectedBackground}
-      />
+          {/* Video Container */}
+          <div className="relative bg-white rounded-lg shadow-md overflow-hidden">
+            {/* Remote Video */}
+            <div className="w-full bg-zinc-100 relative">
+              {remoteStream ? (
+                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-[95vw] h-screen flex flex-col items-center justify-center">
+                  <div className="w-20 h-20 bg-gray-950 rounded-full flex items-center justify-center mb-4">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                      className="w-10 h-10 text-white"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-black font-medium">Waiting for participant to join...</p>
+                </div>
+              )}
 
-      {/* Video Call Status Banner */}
-      {remoteStream && (
-        <div className="absolute top-14 sm:top-16 left-2 sm:left-4 right-2 sm:right-4 bg-green-600 bg-opacity-80 rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 text-center shadow-lg flex items-center justify-center space-x-2 md:w-auto md:left-1/2 md:transform md:-translate-x-1/2">
-          <div className="animate-pulse w-2 h-2 sm:w-3 sm:h-3 bg-white rounded-full"></div>
-          <p className="text-xs sm:text-sm font-medium">Call in progress</p>
+              {/* Local Video (PiP) */}
+              <div className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-[4/3] bg-white rounded-lg overflow-hidden shadow-md">
+                <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                <span className="absolute flex justify-center w-full bottom-1  ">
+                  <span className="bg-black bg-opacity-5 text-xs md:text-sm px-2 rounded">You</span>
+                </span>
+              </div>
+
+              {/* Call Info */}
+              {remoteStream && (
+                <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white text-xs py-1 px-3 rounded-full flex items-center">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                  <span>{formatDuration(callDuration)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Call Controls */}
+            <div className="py-3 px-4 flex items-center justify-center space-x-4 bg-transparent">
+              <ControlBar
+                remoteStream={remoteStream}
+                startCall={startCall}
+                endCall={endCall}
+                isAudioMuted={isAudioMuted}
+                toggleAudio={toggleAudio}
+                isVideoEnabled={isVideoEnabled}
+                toggleVideo={toggleVideo}
+                backgroundRemovalEnabled={backgroundRemovalEnabled}
+                setBackgroundRemovalEnabled={setBackgroundRemovalEnabled}
+                selectedBackground={selectedBackground}
+                setSelectedBackground={setSelectedBackground}
+                isLoading={isLoading}
+                callStatus={callStatus}
+              />
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 shadow-xl flex flex-col items-center">
+            <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+            <p className="text-gray-700 font-medium">
+              {callStatus === "connecting"
+                ? "Establishing connection..."
+                : callStatus === "ending"
+                  ? "Ending call..."
+                  : "Processing..."}
+            </p>
+          </div>
         </div>
       )}
-
-      {/* Current Background Display */}
-      <div className="absolute top-14 sm:top-16 left-2 sm:left-4 px-2 sm:px-3 py-1 bg-black bg-opacity-60 rounded-lg text-xs sm:text-sm text-gray-300">
-        {backgroundRemovalEnabled
-          ? `Background: ${selectedBackground.split("/").pop()?.split(".")[0] || "default"}`
-          : "Background removal: Off"}
-      </div>
     </div>
   )
 }
