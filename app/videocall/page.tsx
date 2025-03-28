@@ -23,6 +23,14 @@ export default function Home() {
   const [callStartTime, setCallStartTime] = useState<number | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const { toast } = useToast()
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const [constraints, setConstraints] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    if (parentRef.current) {
+      setConstraints(parentRef.current.getBoundingClientRect());
+    }
+  }, []);
 
   // Flag to track if background removal is in progress
   const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false)
@@ -871,7 +879,7 @@ export default function Home() {
           {/* Video Container */}
           <div className="relative h-full bg-white bg-opacity-15 flex justify-center rounded-lg shadow-md overflow-hidden">
             {/* Remote Video */}
-            <div className="w-full h-full relative">
+            <div ref={parentRef} className="w-full h-full relative">
               {remoteStream ? (
                 <video
                   ref={remoteVideoRef}
@@ -903,28 +911,28 @@ export default function Home() {
               )}
 
 <motion.div
-  className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-[4/3] bg-white rounded-lg overflow-hidden shadow-md flex justify-center"
-  drag
-  dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }} // Adjust constraints as needed
-  dragElastic={0.2} // Controls the "stretchiness"
-  dragTransition={{ bounceStiffness: 200, bounceDamping: 20 }} // Adds smooth spring effect
->
-  <video
-    ref={localVideoRef}
-    autoPlay
-    playsInline
-    muted
-    className="w-full h-full object-cover"
-  />
-  <span className="absolute bg-black text-white bg-opacity-10 px-2 rounded flex text-xs md:text-sm justify-center left-1 top-1">
-    You
-  </span>
-  {hasMultipleCameras && (
-    <span className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
-      {currentCameraName}
-    </span>
-  )}
-</motion.div>
+        className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-[4/3] bg-white rounded-lg overflow-hidden shadow-md flex justify-center"
+        drag
+        dragConstraints={parentRef} // Dynamically set constraints
+        dragElastic={0.2}
+        dragTransition={{ bounceStiffness: 200, bounceDamping: 20 }}
+      >
+        <video
+          ref={localVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover"
+        />
+        <span className="absolute bg-black text-white bg-opacity-10 px-2 rounded flex text-xs md:text-sm justify-center left-1 top-1">
+          You
+        </span>
+        {hasMultipleCameras && (
+          <span className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+            {currentCameraName}
+          </span>
+        )}
+      </motion.div>
 
               {/* Call Info */}
               {remoteStream && (
