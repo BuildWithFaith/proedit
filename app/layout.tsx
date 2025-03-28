@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import { Geist, Azeret_Mono as Geist_Mono } from "next/font/google"
 import { Toaster } from "@/components/ui/toaster"
-import { ThemeProvider } from "@/components/theme-provider"
 import { Navigate } from "@/components/Navigation"
 import "./globals.css"
 import { PeerProvider } from "@/contexts/PeerContext"
@@ -32,11 +31,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <PeerProvider>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={true}>
             <main className="bg-custom"><MenuBar/>{children}</main>
             <Toaster />
             <Navigate />
-          </ThemeProvider>
         </PeerProvider>
       </body>
     </html>

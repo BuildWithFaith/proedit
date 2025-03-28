@@ -4,11 +4,11 @@ import { usePeer } from "@/contexts/PeerContext"
 import type { MediaConnection } from "peerjs"
 import ControlBar from "@/components/control-bar"
 import BackgroundProcessor from "@/components/background-processor"
-import { ArrowLeft, MoreVertical, Loader2 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Loader2 } from "lucide-react"
+import { useCameraSwitch } from "@/hooks/use-camera-switch"
+import { useToast } from "@/hooks/use-toast"
 
 export default function Home() {
-  const router = useRouter()
   const { peer, peerId, connectedPeerId, setConnectedPeerId } = usePeer()
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [selectedBackground, setSelectedBackground] = useState("/background/office.avif")
@@ -22,11 +22,77 @@ export default function Home() {
   const [callDuration, setCallDuration] = useState(0)
   const [callStartTime, setCallStartTime] = useState<number | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const { toast } = useToast()
+
+  // Flag to track if background removal is in progress
+  const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false)
+  // Ref to store the processed stream
+  const processedStreamRef = useRef<MediaStream | null>(null)
+  // Ref to track if we need to update the remote stream
+  const needsRemoteUpdateRef = useRef<boolean>(false)
+
+  // Use the camera switch hook
+  const {
+    stream: cameraStream,
+    switchCamera,
+    hasMultipleCameras,
+    currentCameraName,
+    isInitialized,
+    error: cameraError,
+    startStream,
+    devices,
+    currentDeviceIndex,
+  } = useCameraSwitch()
 
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const backgroundImageRef = useRef<HTMLImageElement | null>(null)
+
+  // Update local stream when camera stream changes
+  useEffect(() => {
+    if (cameraStream) {
+      // Apply current audio mute state
+      const audioTracks = cameraStream.getAudioTracks()
+      if (audioTracks.length > 0) {
+        audioTracks.forEach((track) => {
+          track.enabled = !isAudioMuted
+        })
+      }
+
+      // Apply current video enabled state
+      const videoTracks = cameraStream.getVideoTracks()
+      if (videoTracks.length > 0) {
+        videoTracks.forEach((track) => {
+          track.enabled = isVideoEnabled
+        })
+      }
+
+      // Set the local stream
+      setLocalStream(cameraStream)
+
+      // Update the video source if background removal is not enabled
+      if (!backgroundRemovalEnabled && localVideoRef.current) {
+        localVideoRef.current.srcObject = cameraStream
+      }
+
+      // If we're in a call and background removal is not enabled, update the remote stream
+      if (activeCall && !backgroundRemovalEnabled) {
+        updateRemoteStream(cameraStream)
+      }
+    }
+  }, [cameraStream, isAudioMuted, isVideoEnabled, activeCall, backgroundRemovalEnabled])
+
+  // Show toast if camera error occurs
+  useEffect(() => {
+    if (cameraError) {
+      toast({
+        title: "Camera Error",
+        description: cameraError,
+        variant: "destructive",
+      })
+    }
+  }, [cameraError, toast])
 
   // Preload background images when the app starts
   useEffect(() => {
@@ -38,22 +104,12 @@ export default function Home() {
     ]).then(() => console.log("✅ All backgrounds preloaded!"))
   }, [])
 
-  // Set video sources when streams change
+  // Set remote video source when remote stream changes
   useEffect(() => {
-    // Set the local video source
-    if (localVideoRef.current) {
-      if (backgroundRemovalEnabled && canvasRef.current) {
-        localVideoRef.current.srcObject = canvasRef.current.captureStream(30) || null
-      } else if (localStream) {
-        localVideoRef.current.srcObject = localStream
-      }
-    }
-
-    // Set the remote video source
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream
     }
-  }, [remoteStream, localStream, backgroundRemovalEnabled])
+  }, [remoteStream])
 
   // Handle call timer
   useEffect(() => {
@@ -86,34 +142,151 @@ export default function Home() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
   }
 
-  // Handle background removal toggle changes
-  useEffect(() => {
-    // Skip if no existing stream
-    if (!localStream) return
+  // Completely rewritten background removal toggle handler
+  const handleBackgroundRemovalToggle = (enabled: boolean | ((prev: boolean) => boolean)) => {
+    // Convert function-style state updates to boolean
+    const newEnabled = typeof enabled === "function" ? enabled(backgroundRemovalEnabled) : enabled
 
-    console.log("Background removal setting changed, updating streams...")
-    setIsLoading(true)
-
-    // Stop current streams first
-    const videoToStop = localVideoRef.current?.srcObject as MediaStream
-    if (videoToStop) {
-      videoToStop.getTracks().forEach((track) => track.stop())
+    // If already in the desired state or processing, do nothing
+    if (backgroundRemovalEnabled === newEnabled || isBackgroundProcessing || isLoading) {
+      return
     }
 
-    // Get new processed stream with updated background removal setting
-    getProcessedStream()
-      .then((newStream) => {
-        // If we have an active call, update its track
-        if (activeCall) {
-          updateRemoteStream(newStream)
+    console.log(`Background removal toggle: ${newEnabled ? "ON" : "OFF"}`)
+
+    // Set loading state
+    setIsLoading(true)
+    setIsBackgroundProcessing(true)
+
+    // Update the state immediately for UI feedback
+    setBackgroundRemovalEnabled(newEnabled)
+
+    // Use an async IIFE to handle the async operations
+    ;(async () => {
+      try {
+        if (!newEnabled) {
+          // Turning OFF background removal
+          console.log("Turning OFF background removal")
+
+          // Make sure we have a valid local stream before stopping background removal
+          if (!localStream) {
+            throw new Error("No camera stream available")
+          }
+
+          // Create a clone of the local stream to ensure we have a fresh stream
+          const freshStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              deviceId: localStream.getVideoTracks()[0]?.getSettings()?.deviceId
+                ? { exact: localStream.getVideoTracks()[0].getSettings().deviceId }
+                : undefined,
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: localStream.getAudioTracks().length > 0,
+          })
+
+          // Apply current audio mute state to the fresh stream
+          if (freshStream.getAudioTracks().length > 0) {
+            freshStream.getAudioTracks().forEach((track) => {
+              track.enabled = !isAudioMuted
+            })
+          }
+
+          // Apply current video enabled state to the fresh stream
+          if (freshStream.getVideoTracks().length > 0) {
+            freshStream.getVideoTracks().forEach((track) => {
+              track.enabled = isVideoEnabled
+            })
+          }
+
+          // Stop the rendering loop and clean up WebGL resources
+          BackgroundProcessor.stopRendering()
+          BackgroundProcessor.cleanup()
+
+          // Clear the processed stream reference
+          processedStreamRef.current = null
+
+          // Set the local stream to the fresh stream
+          setLocalStream(freshStream)
+
+          // Set the video source to the fresh stream immediately to avoid black screen
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = freshStream
+            console.log("Set video source to fresh stream")
+          }
+
+          // If in a call, update the remote stream with the fresh stream immediately
+          if (activeCall) {
+            await updateRemoteStream(freshStream)
+            needsRemoteUpdateRef.current = false
+          }
+        } else {
+          // Turning ON background removal
+          console.log("Turning ON background removal")
+
+          if (!localStream) {
+            throw new Error("No camera stream available")
+          }
+
+          // Process the stream with background removal
+          const processedStream = await BackgroundProcessor.processStreamWithBackgroundRemoval({
+            stream: localStream,
+            selectedBackground,
+            isAudioMuted,
+            canvasRef,
+            backgroundImageRef,
+            setLocalStream: (stream) => {
+              // Store the processed stream in the ref
+              processedStreamRef.current = stream
+
+              // Set the video source to the processed stream immediately
+              if (localVideoRef.current) {
+                localVideoRef.current.srcObject = stream
+                console.log("Set video source to processed stream")
+              }
+            },
+          })
+
+          // Store the processed stream in the ref
+          processedStreamRef.current = processedStream
+
+          // If in a call, update the remote stream with the processed stream immediately
+          if (activeCall) {
+            await updateRemoteStream(processedStream)
+            needsRemoteUpdateRef.current = false
+          }
         }
+      } catch (error) {
+        console.error("Error toggling background removal:", error)
+
+        // If there was an error, revert to the previous state
+        setBackgroundRemovalEnabled(!newEnabled)
+
+        // Show error toast
+        toast({
+          title: "Background Removal Error",
+          description: "Failed to toggle background removal. Please try again.",
+          variant: "destructive",
+        })
+
+        // Clean up if needed
+        if (newEnabled) {
+          BackgroundProcessor.stopRendering()
+          BackgroundProcessor.cleanup()
+          processedStreamRef.current = null
+
+          // Make sure we restore the raw stream to the video element
+          if (localVideoRef.current && localStream) {
+            localVideoRef.current.srcObject = localStream
+          }
+        }
+      } finally {
+        // Clear loading states
         setIsLoading(false)
-      })
-      .catch((err) => {
-        console.error("Error reinitializing stream after background toggle:", err)
-        setIsLoading(false)
-      })
-  }, [backgroundRemovalEnabled, selectedBackground, activeCall])
+        setIsBackgroundProcessing(false)
+      }
+    })()
+  }
 
   // Handle incoming calls
   useEffect(() => {
@@ -125,12 +298,34 @@ export default function Home() {
       setIsLoading(true)
 
       try {
-        const processedStream = await getProcessedStream()
-        console.log("🎥 Processed Stream for Auto-Answering:", processedStream)
+        // Make sure we have a valid local stream before answering
+        let streamToUse = localStream
+
+        // If we don't have a local stream yet, try to get one using the hook's startStream
+        if (!streamToUse && startStream) {
+          console.log("No local stream available, attempting to create one...")
+          const currentDevice = devices && devices.length > 0 ? devices[currentDeviceIndex]?.deviceId : undefined
+          streamToUse = await startStream(currentDevice || "", true)
+
+          if (streamToUse) {
+            console.log("Successfully created stream for incoming call")
+            setLocalStream(streamToUse)
+          } else {
+            throw new Error("Failed to create camera stream for incoming call")
+          }
+        }
+
+        if (!streamToUse) {
+          throw new Error("No camera stream available")
+        }
+
+        // Use the processed stream if background removal is enabled
+        const finalStream =
+          backgroundRemovalEnabled && processedStreamRef.current ? processedStreamRef.current : streamToUse
 
         // Check if we have audio tracks
-        const audioTracks = processedStream.getAudioTracks()
-        console.log(`Audio tracks in processed stream: ${audioTracks.length}`)
+        const audioTracks = finalStream.getAudioTracks()
+        console.log(`Audio tracks in stream: ${audioTracks.length}`)
 
         if (audioTracks.length > 0) {
           // Ensure audio track is enabled unless explicitly muted
@@ -138,7 +333,11 @@ export default function Home() {
           console.log(`Audio track enabled: ${!isAudioMuted}`)
         }
 
-        incomingCall.answer(processedStream)
+        // Set the connected peer ID
+        setConnectedPeerId(incomingCall.peer)
+
+        // Answer the call with our stream
+        incomingCall.answer(finalStream)
         setActiveCall(incomingCall) // Store the call reference
         console.log("✅ Auto-Answered the call")
 
@@ -163,6 +362,11 @@ export default function Home() {
         console.error("Error handling incoming call:", error)
         setCallStatus("idle")
         setIsLoading(false)
+        toast({
+          title: "Call Error",
+          description: "Could not answer the call. Please check your camera and microphone.",
+          variant: "destructive",
+        })
       }
     }
 
@@ -171,7 +375,18 @@ export default function Home() {
     return () => {
       peer.off("call", handleIncomingCall)
     }
-  }, [peer, isAudioMuted])
+  }, [
+    peer,
+    isAudioMuted,
+    toast,
+    localStream,
+    startStream,
+    backgroundRemovalEnabled,
+    selectedBackground,
+    devices,
+    currentDeviceIndex,
+    setConnectedPeerId,
+  ])
 
   // Preload background images
   const preloadImages = (imagePaths: string[]) => {
@@ -203,44 +418,51 @@ export default function Home() {
     img.onload = () => {
       backgroundImageRef.current = img
       console.log(`✅ Background loaded: ${selectedBackground}`)
-    }
-  }, [selectedBackground])
 
-  // Get processed stream with or without background removal
-  const getProcessedStream = async (): Promise<MediaStream> => {
-    // Request user media
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480 },
-      audio: true,
-    })
+      // If background removal is already enabled, we need to reprocess with the new background
+      if (backgroundRemovalEnabled && localStream) {
+        // Flag that we need to update
+        needsRemoteUpdateRef.current = true
 
-    const originalAudioTrack = stream.getAudioTracks()[0]
+        // Process with new background
+        ;(async () => {
+          try {
+            setIsLoading(true)
+            const processedStream = await BackgroundProcessor.processStreamWithBackgroundRemoval({
+              stream: localStream,
+              selectedBackground,
+              isAudioMuted,
+              canvasRef,
+              backgroundImageRef,
+              setLocalStream: (stream) => {
+                processedStreamRef.current = stream
 
-    // If background removal is disabled, store and return the raw stream
-    if (!backgroundRemovalEnabled) {
-      setLocalStream(stream)
+                // Update the video source immediately
+                if (localVideoRef.current) {
+                  localVideoRef.current.srcObject = stream
+                }
+              },
+            })
 
-      // Apply current audio/video state
-      if (isAudioMuted && stream) {
-        const audioTracks = stream.getAudioTracks()
-        audioTracks.forEach((track) => {
-          track.enabled = !isAudioMuted
-        })
+            // If in a call, update the remote stream
+            if (activeCall) {
+              await updateRemoteStream(processedStream)
+              needsRemoteUpdateRef.current = false
+            }
+          } catch (error) {
+            console.error("Error updating background:", error)
+            toast({
+              title: "Background Update Error",
+              description: "Failed to update background. Please try again.",
+              variant: "destructive",
+            })
+          } finally {
+            setIsLoading(false)
+          }
+        })()
       }
-
-      return stream
     }
-
-    // Process stream with background removal
-    return await BackgroundProcessor.processStreamWithBackgroundRemoval({
-      stream,
-      selectedBackground,
-      isAudioMuted,
-      canvasRef,
-      backgroundImageRef,
-      setLocalStream,
-    })
-  }
+  }, [selectedBackground, backgroundRemovalEnabled, localStream, isAudioMuted, activeCall, toast])
 
   // Update remote stream when local stream changes
   const updateRemoteStream = async (newStream: MediaStream) => {
@@ -292,16 +514,55 @@ export default function Home() {
 
   // Start a call
   const startCall = async () => {
-    if (!peer || !connectedPeerId) return
+    if (!peer) {
+      toast({
+        title: "Connection Error",
+        description: "Peer connection not initialized. Please refresh the page and try again.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!connectedPeerId) {
+      toast({
+        title: "Connection Error",
+        description: "No peer connected. Please connect to a peer first.",
+        variant: "destructive",
+      })
+      return
+    }
 
     setCallStatus("connecting")
     setIsLoading(true)
 
     try {
-      const processedStream = await getProcessedStream()
+      // Make sure we have a valid local stream
+      let streamToUse = localStream
+
+      // If we don't have a local stream yet, try to get one using the hook's startStream
+      if (!streamToUse && startStream) {
+        console.log("No local stream available, attempting to create one...")
+        const currentDevice = devices && devices.length > 0 ? devices[currentDeviceIndex]?.deviceId : undefined
+        streamToUse = await startStream(currentDevice || "", true)
+
+        if (streamToUse) {
+          console.log("Successfully created stream for outgoing call")
+          setLocalStream(streamToUse)
+        } else {
+          throw new Error("Failed to create camera stream for outgoing call")
+        }
+      }
+
+      if (!streamToUse) {
+        throw new Error("No camera stream available")
+      }
+
+      // Use the processed stream if background removal is enabled
+      const finalStream =
+        backgroundRemovalEnabled && processedStreamRef.current ? processedStreamRef.current : streamToUse
 
       // Log audio tracks
-      const audioTracks = processedStream.getAudioTracks()
+      const audioTracks = finalStream.getAudioTracks()
       console.log(`Audio tracks in outgoing stream: ${audioTracks.length}`)
 
       if (audioTracks.length > 0) {
@@ -314,13 +575,26 @@ export default function Home() {
 
       console.log("🎥 Setting local video stream...")
       if (localVideoRef.current) {
-        localVideoRef.current.srcObject = processedStream
+        localVideoRef.current.srcObject = finalStream
       }
 
       console.log("📞 Calling peer:", connectedPeerId)
-      const call = peer.call(connectedPeerId, processedStream)
+
+      // Check if peer is still valid before making the call
+      if (!peer || peer.destroyed) {
+        throw new Error("Peer connection is no longer valid")
+      }
+
+      // Make the call and check if we got a valid call object
+      const call = peer.call(connectedPeerId, finalStream)
+
+      if (!call) {
+        throw new Error("Failed to create call object")
+      }
+
       setActiveCall(call) // Store the call reference
 
+      // Set up event listeners
       call.on("stream", (incomingStream) => {
         console.log("🎬 Received Remote Stream:", incomingStream)
 
@@ -337,6 +611,11 @@ export default function Home() {
         console.error("Call error:", err)
         setCallStatus("idle")
         setIsLoading(false)
+        toast({
+          title: "Call Error",
+          description: err.message || "An error occurred during the call",
+          variant: "destructive",
+        })
       })
 
       call.on("close", () => {
@@ -344,10 +623,33 @@ export default function Home() {
         setRemoteStream(null)
         setCallStatus("idle")
       })
-    } catch (error) {
+
+      // Set a timeout in case the call doesn't connect
+      const timeout = setTimeout(() => {
+        if (callStatus === "connecting") {
+          console.log("Call timed out")
+          call.close()
+          setCallStatus("idle")
+          setIsLoading(false)
+          toast({
+            title: "Call Timeout",
+            description: "The call took too long to connect. Please try again.",
+            variant: "destructive",
+          })
+        }
+      }, 30000) // 30 second timeout
+
+      // Clear the timeout if the component unmounts or the call connects
+      return () => clearTimeout(timeout)
+    } catch (error: any) {
       console.error("Error starting call:", error)
       setCallStatus("idle")
       setIsLoading(false)
+      toast({
+        title: "Call Error",
+        description: error.message || "Failed to start call. Please check your camera and microphone.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -362,15 +664,23 @@ export default function Home() {
       BackgroundProcessor.stopRendering()
     }
 
+    // Close the active call
+    if (activeCall) {
+      try {
+        activeCall.close()
+      } catch (e) {
+        console.error("Error closing active call:", e)
+      }
+    }
     setActiveCall(null)
 
-    // 1. Get references to all connections first
+    // Get references to all connections
     const currentPeer = peer
     const currentLocalVideo = localVideoRef.current
     const currentRemoteVideo = remoteVideoRef.current
     const currentCanvas = canvasRef.current
 
-    // 2. Close all media connections specifically
+    // Close all media connections specifically
     if (currentPeer) {
       try {
         // Properly close each media connection
@@ -385,15 +695,12 @@ export default function Home() {
             }
           })
         })
-
-        // Remove all listeners to avoid memory leaks
-        currentPeer.removeAllListeners()
       } catch (e) {
         console.error("Error closing peer connections:", e)
       }
     }
 
-    // 3. Stop all media tracks from all possible sources
+    // Stop all media tracks from all possible sources
     const stopAllTracksFromStream = (stream: MediaStream | null) => {
       if (!stream) return
       console.log("Stopping tracks for stream:", stream.id)
@@ -428,12 +735,13 @@ export default function Home() {
       }
     }
 
-    // 4. Reset global state
+    // Reset global state
     setRemoteStream(null)
 
-    // 5. Clean up WebGL resources if background removal was enabled
+    // Clean up WebGL resources if background removal was enabled
     if (backgroundRemovalEnabled) {
       BackgroundProcessor.cleanup()
+      processedStreamRef.current = null
     }
 
     setIsAudioMuted(false)
@@ -462,6 +770,14 @@ export default function Home() {
         }
       }
 
+      // Also update audio in the processed stream if it exists
+      if (processedStreamRef.current) {
+        const processedAudioTracks = processedStreamRef.current.getAudioTracks()
+        processedAudioTracks.forEach((track) => {
+          track.enabled = isAudioMuted
+        })
+      }
+
       setIsAudioMuted(!isAudioMuted)
       console.log(`🎤 Audio ${isAudioMuted ? "unmuted" : "muted"}`)
     }
@@ -474,103 +790,97 @@ export default function Home() {
       videoTracks.forEach((track) => {
         track.enabled = !isVideoEnabled
       })
+
+      // Also update video in the processed stream if it exists
+      if (processedStreamRef.current) {
+        const processedVideoTracks = processedStreamRef.current.getVideoTracks()
+        processedVideoTracks.forEach((track) => {
+          track.enabled = !isVideoEnabled
+        })
+      }
+
       setIsVideoEnabled(!isVideoEnabled)
       console.log(`📹 Video ${isVideoEnabled ? "disabled" : "enabled"}`)
     }
   }
 
-  return (
-    <div className="bg-white min-h-screen flex flex-col">
-      {/* Header
-      <header className="border-b border-gray-200 bg-white">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 bg-blue-600 rounded-md flex items-center justify-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-6 h-6 text-white"
-              >
-                <path d="M4 6h16v12H4z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="font-semibold text-gray-900">Business Video Call</h1>
-              <p className="text-xs text-gray-500">March 24, 2025 | Virtual Meeting</p>
-            </div>
-          </div>
+  // Handle camera switching - using the hook's switchCamera function
+  const handleSwitchCamera = async () => {
+    if (!hasMultipleCameras) return
 
-          <nav className="hidden md:flex items-center space-x-8">
-            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
-              Home
-            </a>
-            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
-              Agenda
-            </a>
-            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
-              Speakers
-            </a>
-            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
-              Companies
-            </a>
-            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
-              Participants
-            </a>
-            <a href="#" className="text-gray-700 hover:text-gray-900 text-sm font-medium">
-              Marketplace
-            </a>
-          </nav>
+    setIsLoading(true)
+    try {
+      // Use the hook's switchCamera function which handles all the device switching logic
+      const newStream = await switchCamera(true)
 
-          <div className="flex items-center space-x-4">
-            <button className="p-2 rounded-full hover:bg-gray-100">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-5 h-5 text-gray-700"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-              </svg>
-            </button>
-            <button className="p-2 rounded-full hover:bg-gray-100 relative">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-5 h-5 text-gray-700"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
-                />
-              </svg>
-              <span className="absolute top-1 right-1 w-2 h-2 bg-blue-600 rounded-full"></span>
-            </button>
-            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
-              <img src="/placeholder.svg?height=32&width=32" alt="Profile" className="w-full h-full object-cover" />
-            </div>
+      if (newStream) {
+        // The hook will update its internal stream state, which will trigger our useEffect
+        // that updates localStream, so we don't need to set it here
+        toast({
+          title: "Camera Switched",
+          description: `Switched to ${currentCameraName}`,
+        })
+
+        // If background removal is enabled, we need to reprocess the stream
+        if (backgroundRemovalEnabled) {
+          // Turn off background removal first
+          await handleBackgroundRemovalToggle(false)
+
+          // Then turn it back on with the new stream
+          setTimeout(() => {
+            handleBackgroundRemovalToggle(true)
+          }, 500)
+        }
+      } else {
+        throw new Error("Failed to switch camera")
+      }
+    } catch (err) {
+      console.error("Error switching camera:", err)
+      toast({
+        title: "Camera Switch Failed",
+        description: "Failed to switch camera. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Show loading state while camera is initializing
+  if (!isInitialized) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-50">
+        <div className="flex flex-col items-center p-4 rounded-xl shadow-md">
+          <div className="w-10 h-10 mb-4 relative">
+            <div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="absolute w-2.5 h-2.5 bg-blue-500 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
           </div>
+          <p className="text-gray-700 text-sm font-medium">
+            Initializing camera...
+          </p>
         </div>
-      </header> */}
+      </div>
+    );
+  }
 
+  return (
+    <div className="h-screen flex flex-col bg-transparent">
       {/* Main Content */}
-      <main className="flex-1 py-4">
-        <div className="container mx-auto px-4">
-
+      <main className="flex-1 h-[99vh] py-1">
+        <div className="container h-full md:w-[80vw] mx-auto px-4">
           {/* Video Container */}
-          <div className="relative bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="relative h-full bg-white bg-opacity-15 flex justify-center rounded-lg shadow-md overflow-hidden">
             {/* Remote Video */}
-            <div className="w-full bg-zinc-100 relative">
+            <div className="w-full h-full relative">
               {remoteStream ? (
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
               ) : (
-                <div className="w-[95vw] h-screen flex flex-col items-center justify-center">
+                <div className="w-full h-full flex flex-col items-center justify-center">
                   <div className="w-20 h-20 bg-gray-950 rounded-full flex items-center justify-center mb-4">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -586,16 +896,31 @@ export default function Home() {
                       />
                     </svg>
                   </div>
-                  <p className="text-black font-medium">Waiting for participant to join...</p>
+                  <p className="text-black font-medium">
+                    Waiting for participant to join...
+                  </p>
                 </div>
               )}
 
               {/* Local Video (PiP) */}
               <div className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-[4/3] bg-white rounded-lg overflow-hidden shadow-md">
-                <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                <span className="absolute flex justify-center w-full bottom-1  ">
-                  <span className="bg-black bg-opacity-5 text-xs md:text-sm px-2 rounded">You</span>
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <span className="absolute flex justify-center w-full bottom-1">
+                  <span className="bg-black bg-opacity-5 text-xs md:text-sm px-2 rounded">
+                    You
+                  </span>
                 </span>
+                {hasMultipleCameras && (
+                  <span className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+                    {currentCameraName}
+                  </span>
+                )}
               </div>
 
               {/* Call Info */}
@@ -608,7 +933,7 @@ export default function Home() {
             </div>
 
             {/* Call Controls */}
-            <div className="py-3 px-4 flex items-center justify-center space-x-4 bg-transparent">
+            <div className="absolute bottom-5 flex items-center justify-center space-x-4">
               <ControlBar
                 remoteStream={remoteStream}
                 startCall={startCall}
@@ -623,28 +948,33 @@ export default function Home() {
                 setSelectedBackground={setSelectedBackground}
                 isLoading={isLoading}
                 callStatus={callStatus}
+                hasMultipleCameras={hasMultipleCameras}
+                switchCamera={handleSwitchCamera}
+                currentCameraName={currentCameraName}
               />
             </div>
           </div>
         </div>
       </main>
 
-      {/* Loading Overlay */}
       {isLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 shadow-xl flex flex-col items-center">
-            <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 shadow-lg text-center relative">
+            <div className="mx-auto w-12 h-12 mb-4 relative">
+              <div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="absolute inset-0 border-2 border-blue-200 rounded-full"></div>
+              <div className="absolute w-3 h-3 bg-blue-500 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+            </div>
             <p className="text-gray-700 font-medium">
               {callStatus === "connecting"
                 ? "Establishing connection..."
                 : callStatus === "ending"
-                  ? "Ending call..."
-                  : "Processing..."}
+                ? "Ending call..."
+                : "Processing..."}
             </p>
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }
-
