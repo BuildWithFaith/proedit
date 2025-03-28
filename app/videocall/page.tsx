@@ -911,7 +911,7 @@ export default function Home() {
                   muted
                   className="w-full h-full object-cover"
                 />
-                <span className="absolute bg-white bg-opacity-15 px-2 rounded flex text-xs md:text-sm justify-center left-1 top-1">
+                <span className="absolute bg-black text-white bg-opacity-10 px-2 rounded flex text-xs md:text-sm justify-center left-1 top-1">
                     You
                 </span>
                 {hasMultipleCameras && (
