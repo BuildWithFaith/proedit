@@ -4,7 +4,7 @@ import { usePeer } from "@/contexts/PeerContext"
 import type { MediaConnection } from "peerjs"
 import ControlBar from "@/components/control-bar"
 import BackgroundProcessor from "@/components/background-processor"
-import { Loader2 } from "lucide-react"
+import {motion} from "motion/react"
 import { useCameraSwitch } from "@/hooks/use-camera-switch"
 import { useToast } from "@/hooks/use-toast"
 
@@ -902,24 +902,29 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Local Video (PiP) */}
-              <div className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-[4/3] bg-white rounded-lg overflow-hidden shadow-md flex justify-center">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-                <span className="absolute bg-black text-white bg-opacity-10 px-2 rounded flex text-xs md:text-sm justify-center left-1 top-1">
-                    You
-                </span>
-                {hasMultipleCameras && (
-                  <span className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
-                    {currentCameraName}
-                  </span>
-                )}
-              </div>
+<motion.div
+  className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-[4/3] bg-white rounded-lg overflow-hidden shadow-md flex justify-center"
+  drag
+  dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }} // Adjust constraints as needed
+  dragElastic={0.2} // Controls the "stretchiness"
+  dragTransition={{ bounceStiffness: 200, bounceDamping: 20 }} // Adds smooth spring effect
+>
+  <video
+    ref={localVideoRef}
+    autoPlay
+    playsInline
+    muted
+    className="w-full h-full object-cover"
+  />
+  <span className="absolute bg-black text-white bg-opacity-10 px-2 rounded flex text-xs md:text-sm justify-center left-1 top-1">
+    You
+  </span>
+  {hasMultipleCameras && (
+    <span className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+      {currentCameraName}
+    </span>
+  )}
+</motion.div>
 
               {/* Call Info */}
               {remoteStream && (
