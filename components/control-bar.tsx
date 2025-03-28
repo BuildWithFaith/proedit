@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Mic, MicOff, Video, VideoOff, Phone, PhoneOff, Image, Share } from "lucide-react"
+import { Mic, MicOff, Video, VideoOff, Phone, PhoneOff, Image, Share, SwitchCamera } from "lucide-react"
 
 interface ControlBarProps {
   remoteStream: MediaStream | null
@@ -86,22 +86,7 @@ export default function ControlBar({
           aria-label="Switch camera"
           title={`Switch to next camera (Current: ${currentCameraName})`}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-5 w-5"
-          >
-            <path d="M3 7v2a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V7"></path>
-            <path d="M9 17v-2a3 3 0 0 1 6 0v2"></path>
-            <path d="M3 17h18"></path>
-          </svg>
+<SwitchCamera className="h-5 w-5" />
         </button>
       )}
 
