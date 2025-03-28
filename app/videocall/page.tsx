@@ -903,7 +903,7 @@ export default function Home() {
               )}
 
               {/* Local Video (PiP) */}
-              <div className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-[4/3] bg-white rounded-lg overflow-hidden shadow-md">
+              <div className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-[4/3] bg-white rounded-lg overflow-hidden shadow-md flex justify-center">
                 <video
                   ref={localVideoRef}
                   autoPlay
@@ -911,10 +911,8 @@ export default function Home() {
                   muted
                   className="w-full h-full object-cover"
                 />
-                <span className="absolute flex justify-center w-full bottom-1">
-                  <span className="bg-black bg-opacity-5 text-xs md:text-sm px-2 rounded">
+                <span className="absolute bg-white bg-opacity-15 px-2 rounded flex text-xs md:text-sm justify-center left-1 top-1">
                     You
-                  </span>
                 </span>
                 {hasMultipleCameras && (
                   <span className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
