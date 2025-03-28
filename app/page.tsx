@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Copy, Link, UserMinus, QrCode } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { MenuBar } from "@/components/menu-bar"
 
 export default function Home() {
   const { peerId, isConnected, connectedPeerId, connectToPeer, disconnectPeer } = usePeer()
@@ -108,6 +107,7 @@ export default function Home() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowQR(false)}
           >
             <motion.div
               className="bg-white/10 backdrop-blur-xl p-8 rounded-3xl border border-white/20 shadow-2xl"
@@ -129,4 +129,3 @@ export default function Home() {
     </div>
   )
 }
-
