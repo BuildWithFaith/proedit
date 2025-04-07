@@ -205,3 +205,4 @@ export function useScreenShare(options: ScreenShareOptions = {}) {
     screenStream: screenStreamRef.current,
   }
 }
+

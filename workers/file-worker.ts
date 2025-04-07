@@ -140,3 +140,4 @@ function chunkFile(payload: { fileId: string, fileData: ArrayBuffer, chunkSize: 
     });
   }
 }
+

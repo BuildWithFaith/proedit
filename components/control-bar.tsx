@@ -53,7 +53,7 @@ export default function ControlBar({
   const backgroundOptions = [
     { id: "/background/livingroom.jpg", label: "Living Room" },
     { id: "/background/office.jpg", label: "Office" },
-    { id: "/background/workspace.jpg", label: "Work Space" },
+    { id: "/background/worksapce.jpg", label: "Work Space" },
     { id: "/background/workspace2.jpg", label: "Work Space 2" },
   ]
 

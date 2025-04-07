@@ -27,7 +27,7 @@ interface ExtendedNavigator extends Navigator {
 export default function Home() {
   const { peer, connectedPeerId, setConnectedPeerId } = usePeer()
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
-  const [selectedBackground, setSelectedBackground] = useState("/background/workspace.jpg")
+  const [selectedBackground, setSelectedBackground] = useState("/background/workspace2.jpg")
   const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false)
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [activeCall, setActiveCall] = useState<MediaConnection | null>(null)
@@ -129,96 +129,99 @@ export default function Home() {
   // Memoize the mirrorVideoStream function
   const mirrorVideoStream = useCallback(
     (inputStream: MediaStream): Promise<MediaStream> => {
-      // If we shouldn't mirror this stream, return it as is
       if (!shouldMirrorStream()) {
-        return Promise.resolve(inputStream)
+        return Promise.resolve(inputStream);
       }
-
-      console.log("Creating mirrored stream (optimized)")
-
-      // For local display, we'll use CSS transform instead of canvas processing
-      // This function is only for outgoing streams that need mirroring
-
+  
+      console.log("Creating mirrored stream (highly optimized)");
+  
       try {
-        // Create a video element to display the input stream
-        const videoElement = document.createElement("video")
-        videoElement.srcObject = inputStream
-        videoElement.autoplay = true
-        videoElement.muted = true
-        videoElement.playsInline = true
-
-        // Get video dimensions from the track settings
-        const videoTrack = inputStream.getVideoTracks()[0]
-        const settings = videoTrack.getSettings()
-        const width = settings.width || 640
-        const height = settings.height || 480
-
-        // Create a canvas with the same dimensions
-        const canvas = document.createElement("canvas")
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext("2d", { alpha: false }) // Disable alpha for performance
-
-        if (!ctx) {
-          console.error("Could not get canvas context")
-          return Promise.resolve(inputStream) // Return original stream if we can't get context
+        const videoElement = document.createElement("video");
+        videoElement.srcObject = inputStream;
+        videoElement.autoplay = true;
+        videoElement.muted = true;
+        videoElement.playsInline = true;
+  
+        const videoTrack = inputStream.getVideoTracks()[0];
+        const settings = videoTrack.getSettings();
+        const width = settings.width || 640;
+        const height = settings.height || 480;
+  
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+  
+        let ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
+  
+        // Try to use OffscreenCanvas if available
+        if (canvas.transferControlToOffscreen) {
+          const offscreen = canvas.transferControlToOffscreen();
+          ctx = offscreen.getContext("2d", { alpha: false });
+        } else {
+          ctx = canvas.getContext("2d", { alpha: false });
         }
-
-        // Wait for video to be ready
+  
+        if (!ctx) {
+          console.error("Could not get canvas context");
+          return Promise.resolve(inputStream);
+        }
+  
+        // Disable image smoothing for pixel-perfect mirroring
+        ctx.imageSmoothingEnabled = false;
+  
         return new Promise<MediaStream>((resolve) => {
           videoElement.onloadedmetadata = () => {
-            videoElement.play().catch((err) => console.error("Error playing video:", err))
-
-            // Create a stream with lower framerate for better performance
-            const mirroredStream = canvas.captureStream(20) // 20fps instead of 30fps
-
-            // Add audio tracks from the original stream
+            videoElement.play().catch((err) => console.error("Error playing video:", err));
+  
+            const mirroredStream = canvas.captureStream(25); // 25 FPS as you requested
+  
             inputStream.getAudioTracks().forEach((track) => {
               try {
-                mirroredStream.addTrack(track)
+                mirroredStream.addTrack(track);
               } catch (err) {
-                console.error("Error adding audio track:", err)
+                console.error("Error adding audio track:", err);
               }
-            })
-
-            // Use requestAnimationFrame for better performance
-            const draw = () => {
+            });
+  
+            const drawFrame = () => {
               if (videoElement.readyState >= 2) {
-                // Flip horizontally - only draw when video has data
-                ctx.clearRect(0, 0, canvas.width, canvas.height)
-                ctx.save()
-                ctx.scale(-1, 1)
-                ctx.drawImage(videoElement, -canvas.width, 0, canvas.width, canvas.height)
-                ctx.restore()
+                ctx.save();
+                ctx.scale(-1, 1); // Mirror horizontally
+                ctx.drawImage(videoElement, -canvas.width, 0, canvas.width, canvas.height);
+                ctx.restore();
               }
-
-              // Only continue animation if the stream is active
+  
               if (mirroredStream.active) {
-                requestAnimationFrame(draw)
+                if ("requestVideoFrameCallback" in videoElement) {
+                  (videoElement as any).requestVideoFrameCallback(() => drawFrame());
+                } else {
+                  requestAnimationFrame(drawFrame);
+                }
               }
-            }
-
+            };
+  
             // Start drawing
-            draw()
-
-            resolve(mirroredStream)
-          }
-
-          // Fallback if metadata doesn't load within 1 second
+            drawFrame();
+  
+            resolve(mirroredStream);
+          };
+  
+          // Fallback if metadata doesn't load
           setTimeout(() => {
             if (!videoElement.readyState) {
-              console.warn("Video metadata loading timeout, using original stream")
-              resolve(inputStream)
+              console.warn("Video metadata loading timeout, using original stream");
+              resolve(inputStream);
             }
-          }, 1000)
-        })
+          }, 1000);
+        });
       } catch (err) {
-        console.error("Error in mirrorVideoStream:", err)
-        return Promise.resolve(inputStream) // Return original stream on error
+        console.error("Error in mirrorVideoStream:", err);
+        return Promise.resolve(inputStream);
       }
     },
     [shouldMirrorStream],
-  )
+  );
+  
 
   // Memoize the updateRemoteStream function
   const updateRemoteStream = useCallback(
@@ -326,7 +329,7 @@ export default function Home() {
   // Preload background images when the app starts
   useEffect(() => {
     preloadImages([
-      "/background/livingroom.jpg",
+      "/background/livingroom",
       "/background/office.jpg",
       "/background/workspace.jpg",
       "/background/workspace2.jpg",
@@ -1395,7 +1398,7 @@ export default function Home() {
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
-                  className={`w-full h-full object-cover ${shouldMirrorStream() ? "scale-x-[-1]" : ""}`}
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <div
@@ -1411,12 +1414,8 @@ export default function Home() {
 
               {/* Local Video (PiP) - Hide when screen sharing */}
               {!isScreenSharing && (
-                <motion.div
-                  drag
-                  dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-                  dragElastic={0.2}
-                  className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-4/3 rounded-lg overflow-hidden shadow-md"
-                >
+                <div
+                  className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-4/3 rounded-lg overflow-hidden shadow-md">
                   <video
                     ref={localVideoRef}
                     autoPlay
@@ -1434,7 +1433,7 @@ export default function Home() {
                       </span>
                     )}
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Also add a screen sharing indicator when screen sharing is active */}
