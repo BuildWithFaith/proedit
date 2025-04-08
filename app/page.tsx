@@ -37,14 +37,7 @@ export default function Home() {
   }
 
   return (
-    <div className="relative min-h-screen w-full bg-[radial-gradient(ellipse_at_bottom_right,_#edf7fa,_#5f6caf,_#ffb677)]">
-      {/* Orbital floating elements for visionOS feel */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full bg-purple-500/10 blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/3 w-80 h-80 rounded-full bg-blue-500/10 blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
-        <div className="absolute top-1/3 right-1/4 w-72 h-72 rounded-full bg-indigo-500/10 blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
-      </div>
-      
+    <div>
       <div className="relative z-10 flex items-center justify-center min-h-screen p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }} 
@@ -54,7 +47,7 @@ export default function Home() {
         >
           <div className="backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl overflow-hidden p-8">
             {/* Glassmorphism effect for visionOS */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-3xl pointer-events-none" />
+            <div className="absolute inset-0 bg-white/10 border-0 shadow-lg rounded-3xl pointer-events-none" />
             
             <h2 className="text-3xl font-medium text-center text-white mb-8">P2P File Sharing & Video Call</h2>
 

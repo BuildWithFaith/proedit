@@ -20,7 +20,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "File Sharing and Video Call App",
-  description: "A peer-to-peer file sharing and Video Calling app Fast and Secure ",
+  description:
+    "A peer-to-peer file sharing and Video Calling app Fast and Secure ",
 };
 
 export default function RootLayout({
@@ -31,7 +32,10 @@ export default function RootLayout({
       <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
         <PeerProvider>
           <MenuBar />
-          <main>{children}</main>
+          <main className="relative min-h-screen w-full overflow-hidden">
+            <div className="absolute inset-0 bg-[url('/background_image.jpg')] bg-cover bg-center blur-xl scale-110" />
+            <div className="relative z-10">{children}</div>
+          </main>
           <Toaster />
           <Navigate />
         </PeerProvider>

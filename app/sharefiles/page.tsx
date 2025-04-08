@@ -835,13 +835,13 @@ export default function FilesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_bottom_right,_#edf7fa,_#5f6caf,_#ffb677)] flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="container max-w-4xl">
         {/* Main content area */}
         <div className="space-y-6">
           {/* File transfer area */}
           {isConnected ? (
-            <Card className="bg-white/10 backdrop-blur-xl border-0 shadow-lg rounded-3xl overflow-hidden">
+            <Card className="bg-white/10 border-0 shadow-lg rounded-3xl overflow-hidden">
               <CardHeader className="border-b border-white/10 pb-4">
                 <CardTitle className="text-white text-center text-2xl font-light">
                   File Transfer with {connectedPeerId}

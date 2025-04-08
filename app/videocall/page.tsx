@@ -4,7 +4,6 @@ import { usePeer } from "@/contexts/PeerContext"
 import type { MediaConnection } from "peerjs"
 import ControlBar from "@/components/control-bar"
 import BackgroundProcessor from "@/components/background-processor"
-import { motion } from "motion/react"
 import { useCameraSwitch } from "@/hooks/use-camera-switch"
 import { useToast } from "@/hooks/use-toast"
 import { VideoIcon } from "lucide-react"
@@ -58,6 +57,8 @@ export default function Home() {
   const [previousStream, setPreviousStream] = useState<MediaStream | null>(null)
   const [isPageVisible, setIsPageVisible] = useState(true)
   const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Add this state variable after the other state declarations (around line 30)
+  const [shouldMirror, setShouldMirror] = useState(false)
 
   // Add this ref at the top of the component with the other refs
 
@@ -103,15 +104,17 @@ export default function Home() {
   }, [])
 
   // Memoize the shouldMirrorStream function
-  const shouldMirrorStream = useCallback((): boolean => {
+  const updateMirrorState = useCallback(() => {
     // If it's explicitly a front camera, mirror it
     if (currentCameraName === "Front Camera") {
-      return true
+      setShouldMirror(true)
+      return
     }
 
     // For devices with only one camera (like laptops), assume it's front-facing
     if (!hasMultipleCameras) {
-      return true
+      setShouldMirror(true)
+      return
     }
 
     // For other cases, check if the camera label contains keywords suggesting it's front-facing
@@ -119,111 +122,118 @@ export default function Home() {
       const currentDevice = devices[currentDeviceIndex]
       if (currentDevice && currentDevice.label) {
         const label = currentDevice.label.toLowerCase()
-        return label.includes("front") || label.includes("user") || label.includes("face")
+        setShouldMirror(label.includes("front") || label.includes("user") || label.includes("face"))
+        return
       }
     }
 
-    return false
+    setShouldMirror(false)
   }, [currentCameraName, hasMultipleCameras, devices, currentDeviceIndex])
 
-  // Memoize the mirrorVideoStream function
+  // Add a useEffect to update the mirror state when camera changes
+  useEffect(() => {
+    updateMirrorState()
+  }, [currentCameraName, hasMultipleCameras, devices, currentDeviceIndex, updateMirrorState])
+
+  // Replace the mirrorVideoStream function with this version that uses the state
   const mirrorVideoStream = useCallback(
     (inputStream: MediaStream): Promise<MediaStream> => {
-      if (!shouldMirrorStream()) {
-        return Promise.resolve(inputStream);
+      // Use the state value instead of calling shouldMirrorStream()
+      if (!shouldMirror) {
+        console.log("Mirroring not needed for this camera")
+        return Promise.resolve(inputStream)
       }
-  
-      console.log("Creating mirrored stream (highly optimized)");
-  
+
+      console.log("Creating mirrored stream")
+
       try {
-        const videoElement = document.createElement("video");
-        videoElement.srcObject = inputStream;
-        videoElement.autoplay = true;
-        videoElement.muted = true;
-        videoElement.playsInline = true;
-  
-        const videoTrack = inputStream.getVideoTracks()[0];
-        const settings = videoTrack.getSettings();
-        const width = settings.width || 640;
-        const height = settings.height || 480;
-  
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-  
-        let ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
-  
-        // Try to use OffscreenCanvas if available
-        if (canvas.transferControlToOffscreen) {
-          const offscreen = canvas.transferControlToOffscreen();
-          ctx = offscreen.getContext("2d", { alpha: false });
-        } else {
-          ctx = canvas.getContext("2d", { alpha: false });
+        const videoElement = document.createElement("video")
+        videoElement.srcObject = inputStream
+        videoElement.autoplay = true
+        videoElement.muted = true
+        videoElement.playsInline = true
+
+        const videoTrack = inputStream.getVideoTracks()[0]
+        if (!videoTrack) {
+          console.error("No video track found in stream to mirror")
+          return Promise.resolve(inputStream)
         }
-  
+
+        const settings = videoTrack.getSettings()
+        const width = settings.width || 640
+        const height = settings.height || 480
+
+        const canvas = document.createElement("canvas")
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext("2d", { alpha: false })
+
         if (!ctx) {
-          console.error("Could not get canvas context");
-          return Promise.resolve(inputStream);
+          console.error("Could not get canvas context")
+          return Promise.resolve(inputStream)
         }
-  
+
         // Disable image smoothing for pixel-perfect mirroring
-        ctx.imageSmoothingEnabled = false;
-  
+        ctx.imageSmoothingEnabled = false
+
         return new Promise<MediaStream>((resolve) => {
+          const mirroredStream = canvas.captureStream(30) // Use 30fps for smoother video
+
+          // Add all audio tracks from the original stream
+          inputStream.getAudioTracks().forEach((track) => {
+            try {
+              mirroredStream.addTrack(track)
+            } catch (err) {
+              console.error("Error adding audio track:", err)
+            }
+          })
+
+          const drawFrame = () => {
+            if (document.visibilityState === "visible" && videoElement.readyState >= 2) {
+              ctx.save()
+              ctx.clearRect(0, 0, canvas.width, canvas.height)
+              ctx.scale(-1, 1) // Mirror horizontally
+              ctx.drawImage(videoElement, -canvas.width, 0, canvas.width, canvas.height)
+              ctx.restore()
+            }
+
+            if (mirroredStream.active) {
+              requestAnimationFrame(drawFrame)
+            }
+          }
+
           videoElement.onloadedmetadata = () => {
-            videoElement.play().catch((err) => console.error("Error playing video:", err));
-  
-            const mirroredStream = canvas.captureStream(25); // 25 FPS as you requested
-  
-            inputStream.getAudioTracks().forEach((track) => {
-              try {
-                mirroredStream.addTrack(track);
-              } catch (err) {
-                console.error("Error adding audio track:", err);
-              }
-            });
-  
-            const drawFrame = () => {
-              if (videoElement.readyState >= 2) {
-                ctx.save();
-                ctx.scale(-1, 1); // Mirror horizontally
-                ctx.drawImage(videoElement, -canvas.width, 0, canvas.width, canvas.height);
-                ctx.restore();
-              }
-  
-              if (mirroredStream.active) {
-                if ("requestVideoFrameCallback" in videoElement) {
-                  (videoElement as any).requestVideoFrameCallback(() => drawFrame());
-                } else {
-                  requestAnimationFrame(drawFrame);
-                }
-              }
-            };
-  
-            // Start drawing
-            drawFrame();
-  
-            resolve(mirroredStream);
-          };
-  
-          // Fallback if metadata doesn't load
+            videoElement
+              .play()
+              .then(() => {
+                console.log("✅ Started mirroring stream successfully")
+                // Start drawing frames
+                drawFrame()
+                resolve(mirroredStream)
+              })
+              .catch((err) => {
+                console.error("Error playing video for mirroring:", err)
+                resolve(inputStream) // Fallback to original stream
+              })
+          }
+
+          // Fallback if metadata doesn't load within 1 second
           setTimeout(() => {
             if (!videoElement.readyState) {
-              console.warn("Video metadata loading timeout, using original stream");
-              resolve(inputStream);
+              console.warn("Video metadata loading timeout, using original stream")
+              resolve(inputStream)
             }
-          }, 1000);
-        });
+          }, 1000)
+        })
       } catch (err) {
-        console.error("Error in mirrorVideoStream:", err);
-        return Promise.resolve(inputStream);
+        console.error("Error in mirrorVideoStream:", err)
+        return Promise.resolve(inputStream)
       }
     },
-    [shouldMirrorStream],
-  );
-  
+    [shouldMirror], // Only depend on the state, not the function
+  )
 
-  // Memoize the updateRemoteStream function
+  // Update the updateRemoteStream function to use the state
   const updateRemoteStream = useCallback(
     async (newStream: MediaStream) => {
       if (!activeCall || !activeCall.peerConnection) {
@@ -232,18 +242,23 @@ export default function Home() {
       }
 
       try {
-        // Mirror the stream if it should be mirrored
-        let streamToSend = newStream
-        if (shouldMirrorStream()) {
-          console.log("Mirroring stream for remote peer")
+        console.log("Starting remote stream update process...")
+
+        // Use the state value instead of calling shouldMirrorStream()
+        let streamToSend
+        if (shouldMirror) {
+          console.log("Mirroring required for remote stream")
           streamToSend = await mirrorVideoStream(newStream)
+        } else {
+          console.log("No mirroring needed for remote stream")
+          streamToSend = newStream
         }
 
         const videoTrack = streamToSend.getVideoTracks()[0]
         const audioTrack = streamToSend.getAudioTracks()[0]
 
         if (!videoTrack) {
-          console.error("No video track in new stream")
+          console.error("No video track in stream to send")
           return
         }
 
@@ -278,10 +293,10 @@ export default function Home() {
         console.error("Error updating remote stream:", error)
       }
     },
-    [activeCall, shouldMirrorStream, mirrorVideoStream, isAudioMuted],
+    [activeCall, shouldMirror, mirrorVideoStream, isAudioMuted],
   )
 
-  // Update local stream when camera stream changes
+  // Update the useEffect that handles camera stream changes to use the state
   useEffect(() => {
     if (cameraStream) {
       // Apply current audio mute state
@@ -306,14 +321,25 @@ export default function Home() {
       // Update the video source if background removal is not enabled
       if (!backgroundRemovalEnabled && localVideoRef.current) {
         localVideoRef.current.srcObject = cameraStream
+        // Apply CSS mirroring for local video display based on state
+        localVideoRef.current.style.transform = shouldMirror ? "scale(-1, 1)" : "none"
       }
 
       // If we're in a call and background removal is not enabled, update the remote stream
       if (activeCall && !backgroundRemovalEnabled) {
+        // Let updateRemoteStream handle the mirroring decision
         updateRemoteStream(cameraStream)
       }
     }
-  }, [cameraStream, isAudioMuted, isVideoEnabled, activeCall, backgroundRemovalEnabled, updateRemoteStream])
+  }, [
+    cameraStream,
+    isAudioMuted,
+    isVideoEnabled,
+    activeCall,
+    backgroundRemovalEnabled,
+    updateRemoteStream,
+    shouldMirror,
+  ])
 
   // Show toast if camera error occurs
   useEffect(() => {
@@ -329,7 +355,7 @@ export default function Home() {
   // Preload background images when the app starts
   useEffect(() => {
     preloadImages([
-      "/background/livingroom",
+      "/background/livingroom.jpg",
       "/background/office.jpg",
       "/background/workspace.jpg",
       "/background/workspace2.jpg",
@@ -375,7 +401,20 @@ export default function Home() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
   }
 
-  // Memoize the handleBackgroundRemovalToggle function to avoid dependency issues
+  // Pre-process the stream with mirroring if needed before passing to background removal
+  const prepareStreamForBackgroundRemoval = useCallback(
+    async (stream: MediaStream): Promise<MediaStream> => {
+      // If mirroring is needed, apply it before background removal
+      if (shouldMirror) {
+        console.log("Applying mirroring before background removal")
+        return await mirrorVideoStream(stream)
+      }
+      return stream
+    },
+    [shouldMirror, mirrorVideoStream],
+  )
+
+  // Update the handleBackgroundRemovalToggle function to use the state
   const handleBackgroundRemovalToggle = useCallback(
     (enabled: boolean | ((prev: boolean) => boolean)) => {
       // Convert function-style state updates to boolean
@@ -449,10 +488,13 @@ export default function Home() {
             if (localVideoRef.current) {
               localVideoRef.current.srcObject = freshStream
               console.log("Set video source to fresh stream")
+              // Apply CSS mirroring for local video display based on state
+              localVideoRef.current.style.transform = shouldMirror ? "scale(-1, 1)" : "none"
             }
 
-            // If in a call, update the remote stream with the fresh stream immediately
+            // If in a call, update the remote stream
             if (activeCall) {
+              // Here we'll let updateRemoteStream handle the mirroring
               await updateRemoteStream(freshStream)
               needsRemoteUpdateRef.current = false
             }
@@ -464,9 +506,12 @@ export default function Home() {
               throw new Error("No camera stream available")
             }
 
+            // First, apply mirroring if needed before passing to background removal
+            const preparedStream = await prepareStreamForBackgroundRemoval(localStream)
+
             // Process the stream with background removal
             const processedStream = await BackgroundProcessor.processStreamWithBackgroundRemoval({
-              stream: localStream,
+              stream: preparedStream,
               selectedBackground,
               isAudioMuted,
               canvasRef,
@@ -479,6 +524,8 @@ export default function Home() {
                 if (localVideoRef.current) {
                   localVideoRef.current.srcObject = stream
                   console.log("Set video source to processed stream")
+                  // Don't apply CSS mirroring here as the background removal process
+                  // should handle mirroring in its own canvas rendering
                 }
               },
             })
@@ -486,8 +533,9 @@ export default function Home() {
             // Store the processed stream in the ref
             processedStreamRef.current = processedStream
 
-            // If in a call, update the remote stream with the processed stream immediately
+            // If in a call, update the remote stream
             if (activeCall) {
+              // Here we'll let updateRemoteStream handle the mirroring
               await updateRemoteStream(processedStream)
               needsRemoteUpdateRef.current = false
             }
@@ -514,6 +562,8 @@ export default function Home() {
             // Make sure we restore the raw stream to the video element
             if (localVideoRef.current && localStream) {
               localVideoRef.current.srcObject = localStream
+              // Apply CSS mirroring for local video display based on state
+              localVideoRef.current.style.transform = shouldMirror ? "scale(-1, 1)" : "none"
             }
           }
         } finally {
@@ -534,6 +584,8 @@ export default function Home() {
       activeCall,
       toast,
       updateRemoteStream,
+      shouldMirror,
+      prepareStreamForBackgroundRemoval,
     ],
   )
 
@@ -575,8 +627,8 @@ export default function Home() {
           localVideoRef.current.srcObject = streamToUse
         }
 
-        // Mirror the stream if needed for the outgoing call
-        if (shouldMirrorStream()) {
+        // Mirror the stream if needed for the outgoing call based on state
+        if (shouldMirror) {
           console.log("Mirroring incoming call stream for remote peer")
           finalStream = await mirrorVideoStream(finalStream)
         }
@@ -641,7 +693,7 @@ export default function Home() {
       devices,
       currentDeviceIndex,
       backgroundRemovalEnabled,
-      shouldMirrorStream,
+      shouldMirror,
       mirrorVideoStream,
       isAudioMuted,
       setConnectedPeerId,
@@ -679,8 +731,12 @@ export default function Home() {
         ;(async () => {
           try {
             setIsLoading(true)
+
+            // First, apply mirroring if needed before passing to background removal
+            const preparedStream = await prepareStreamForBackgroundRemoval(localStream)
+
             const processedStream = await BackgroundProcessor.processStreamWithBackgroundRemoval({
-              stream: localStream,
+              stream: preparedStream,
               selectedBackground,
               isAudioMuted,
               canvasRef,
@@ -713,7 +769,16 @@ export default function Home() {
         })()
       }
     }
-  }, [selectedBackground, backgroundRemovalEnabled, localStream, isAudioMuted, activeCall, toast, updateRemoteStream])
+  }, [
+    selectedBackground,
+    backgroundRemovalEnabled,
+    localStream,
+    isAudioMuted,
+    activeCall,
+    toast,
+    updateRemoteStream,
+    prepareStreamForBackgroundRemoval,
+  ])
 
   // Handle orientation changes for mobile devices
   useEffect(() => {
@@ -883,7 +948,7 @@ export default function Home() {
     }
   }
 
-  // Start a call
+  // Update the startCall function to use the state
   const startCall = async () => {
     if (!peer) {
       toast({
@@ -938,8 +1003,8 @@ export default function Home() {
         localVideoRef.current.srcObject = streamToUse
       }
 
-      // Mirror the stream if needed for the outgoing call
-      if (shouldMirrorStream()) {
+      // Mirror the stream if needed for the outgoing call based on state
+      if (shouldMirror) {
         console.log("Mirroring outgoing stream for remote peer")
         finalStream = await mirrorVideoStream(finalStream)
       }
@@ -1197,7 +1262,7 @@ export default function Home() {
     }
   }
 
-  // Handle camera switching - using the hook's switchCamera function
+  // Update the handleSwitchCamera function to update the mirror state
   const handleSwitchCamera = async () => {
     if (!hasMultipleCameras) return
 
@@ -1209,6 +1274,10 @@ export default function Home() {
       if (newStream) {
         // The hook will update its internal stream state, which will trigger our useEffect
         // that updates localStream, so we don't need to set it here
+
+        // Update the mirror state based on the new camera
+        updateMirrorState()
+
         toast({
           title: "Camera Switched",
           description: `Switched to ${currentCameraName}`,
@@ -1222,6 +1291,7 @@ export default function Home() {
           // Then turn it back on with the new stream
           setTimeout(() => {
             handleBackgroundRemovalToggle(true)
+            setIsLoading(false)
           }, 500)
         }
       } else {
@@ -1371,7 +1441,7 @@ export default function Home() {
   // Show loading state while camera is initializing
   if (!isInitialized) {
     return (
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_#edf7fa,_#5f6caf,_#ffb677)] flex items-center justify-center z-50">
+      <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50">
         <div className="bg-white rounded-xl p-6 shadow-lg text-center relative">
           <div className="mx-auto w-12 h-12 mb-4 relative">
             <div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -1385,7 +1455,7 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[radial-gradient(ellipse_at_bottom_right,_#edf7fa,_#5f6caf,_#ffb677)]">
+    <div className="h-screen flex flex-col">
       {/* Main Content */}
       <main className="flex-1 h-[99vh] py-1">
         <div className="container h-full md:w-[80vw] mx-auto px-4">
@@ -1394,35 +1464,22 @@ export default function Home() {
             {/* Remote Video */}
             <div className="w-full h-full relative">
               {remoteStream ? (
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
+                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
               ) : (
                 <div
-                  className="flex flex-col items-center justify-center w-full h-full border border-white/30 rounded-2xl
-                bg-white/10 backdrop-blur-md transition-all hover:backdrop-blur-lg"
+                  className="flex flex-col items-center justify-center w-full h-full border border-white/20 rounded-2xl bg-white/10 shadow-lg"
                 >
-                  <div className="flex items-center justify-center w-20 h-20 mb-4 rounded-full bg-black">
-                    <VideoIcon className="w-8 h-8 text-white" />
+                  <div className="flex items-center justify-center w-20 h-20 mb-4 rounded-full bg-white">
+                    <VideoIcon className="w-8 h-8 text-black" />
                   </div>
-                  <p className="text-black font-medium">Waiting for participant to join...</p>
+                  <p className="text-white font-medium">Waiting for participant to join...</p>
                 </div>
               )}
 
               {/* Local Video (PiP) - Hide when screen sharing */}
               {!isScreenSharing && (
-                <div
-                  className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-4/3 rounded-lg overflow-hidden shadow-md">
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className={`w-full h-full object-cover ${shouldMirrorStream() ? "scale-x-[-1]" : ""}`}
-                  />
+                <div className="absolute top-4 left-4 w-36 lg:w-1/6 xl:w-44 aspect-4/3 rounded-lg overflow-hidden shadow-md">
+                  <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                   <div className="absolute inset-0 pointer-events-none">
                     <span className="absolute bg-black/20 text-white bg-opacity-10 px-2 rounded text-xs md:text-sm bottom-1 left-1">
                       You
@@ -1497,7 +1554,7 @@ export default function Home() {
       </main>
 
       {isLoading && (
-        <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_#edf7fa,_#5f6caf,_#ffb677)] flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 shadow-lg text-center relative">
             <div className="mx-auto w-12 h-12 mb-4 relative">
               <div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -1517,4 +1574,3 @@ export default function Home() {
     </div>
   )
 }
-
