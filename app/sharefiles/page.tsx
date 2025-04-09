@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import FileWorkerManager, {
   type FileMetadata,
 } from "@/components/file-worker-manager";
+import PageSeo from "@/components/FileSharingSeo";
 
 interface TransferRecord {
   id: string;
@@ -836,17 +837,13 @@ export default function FilesPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
+      <PageSeo/>
       <div className="container max-w-4xl">
         {/* Main content area */}
         <div className="space-y-6">
           {/* File transfer area */}
           {isConnected ? (
             <Card className="bg-white/10 border-0 shadow-lg rounded-3xl overflow-hidden">
-              <CardHeader className="border-b border-white/10 pb-4">
-                <CardTitle className="text-white text-center text-2xl font-light">
-                  File Transfer with {connectedPeerId}
-                </CardTitle>
-              </CardHeader>
               <CardContent className=" space-y-6 p-6 ">
                 <div
                   {...getRootProps()}
@@ -867,26 +864,6 @@ export default function FilesPage() {
                     Share files securely with your connected peer
                   </p>
                 </div>
-
-                {isConnected && (
-                  <div className="mt-4 text-center">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        console.log("Testing connection...");
-                        sendData({ test: "Hello from file sharing!" });
-                        toast({
-                          title: "Test Message Sent",
-                          description:
-                            "Check the console for connection details",
-                        });
-                      }}
-                      className="bg-white/10 hover:bg-white/20 text-white border-white/20"
-                    >
-                      Test Connection
-                    </Button>
-                  </div>
-                )}
 
                 {/* Active transfers list */}
                 {activeTransfers.length > 0 && (

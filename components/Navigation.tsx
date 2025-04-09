@@ -48,15 +48,15 @@ export function Navigate() {
               >
                 <motion.div
                   whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
+                  whileTap={{ scale: 0.8 }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{
                     duration: 0.3,
-                    delay: 0.08 * index,
+                    delay: 0.1 * index,
                     type: "spring",
-                    stiffness: 250,
-                    damping: 15,
+                    stiffness: 100,
+                    damping: 20,
                   }}
                 >
                   <Icon size={28} className="text-black" />

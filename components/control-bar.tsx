@@ -51,10 +51,10 @@ export default function ControlBar({
 
   // Background options with labels
   const backgroundOptions = [
-    { id: "/background/livingroom.jpg", label: "Living Room" },
-    { id: "/background/office.jpg", label: "Office" },
-    { id: "/background/workspace.jpg", label: "Work Space" },
-    { id: "/background/workspace2.jpg", label: "Work Space 2" },
+    { id: "/background/livingroom.jpg", label: "Living Room 1" },
+    { id: "/background/livingroom2.jpg", label: "Living Room 2" },
+    { id: "/background/livingroom3.jpg", label: "Living Room 3" },
+    { id: "/background/office.jpg", label: "office" },
   ]
 
   return (

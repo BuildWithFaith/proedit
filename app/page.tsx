@@ -1,5 +1,6 @@
 "use client"
 
+import AppSeo from "@/components/Seo"
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { usePeer } from "@/contexts/PeerContext"
@@ -38,6 +39,7 @@ export default function Home() {
 
   return (
     <div>
+      <AppSeo/>
       <div className="relative z-10 flex items-center justify-center min-h-screen p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }} 
