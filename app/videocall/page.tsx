@@ -1,56 +1,51 @@
-"use client";
-import PageSeo from "@/components/VideoCallSeo";
-import { useEffect, useState, useRef, useCallback } from "react";
-import { usePeer } from "@/contexts/PeerContext";
-import type { MediaConnection } from "peerjs";
-import ControlBar from "@/components/control-bar";
-import BackgroundProcessor from "@/components/background-processor";
-import { useCameraSwitch } from "@/hooks/use-camera-switch";
-import { useToast } from "@/hooks/use-toast";
-import { VideoIcon } from "lucide-react";
+"use client"
+import PageSeo from "@/components/VideoCallSeo"
+import { useEffect, useState, useRef, useCallback } from "react"
+import { usePeer } from "@/contexts/PeerContext"
+import type { MediaConnection } from "peerjs"
+import ControlBar from "@/components/control-bar"
+import BackgroundProcessor from "@/components/background-processor"
+import { useCameraSwitch } from "@/hooks/use-camera-switch"
+import { useToast } from "@/hooks/use-toast"
+import { VideoIcon } from "lucide-react"
 // Import the useScreenShare hook at the top with other imports
-import { useScreenShare } from "@/hooks/use-screen-share";
+import { useScreenShare } from "@/hooks/use-screen-share"
 
 // Define custom interfaces for extended browser APIs
 interface ExtendedRTCPeerConnection extends RTCPeerConnection {
-  getDataChannels?: () => RTCDataChannel[];
-  dataChannel?: RTCDataChannel;
-  dataChannels?: RTCDataChannel[];
+  getDataChannels?: () => RTCDataChannel[]
+  dataChannel?: RTCDataChannel
+  dataChannels?: RTCDataChannel[]
 }
 
 interface ExtendedNavigator extends Navigator {
   scheduling?: {
-    isInputPending?: () => boolean;
-  };
+    isInputPending?: () => boolean
+  }
 }
 
 export default function Home() {
-  const { peer, connectedPeerId, setConnectedPeerId } = usePeer();
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [selectedBackground, setSelectedBackground] = useState(
-    "/background/livingroom.jpg"
-  );
-  const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] =
-    useState(false);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [activeCall, setActiveCall] = useState<MediaConnection | null>(null);
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [callStatus, setCallStatus] = useState<
-    "idle" | "connecting" | "connected" | "ending"
-  >("idle");
-  const [callDuration, setCallDuration] = useState(0);
-  const [callStartTime, setCallStartTime] = useState<number | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const { toast } = useToast();
+  const { peer, connectedPeerId, setConnectedPeerId } = usePeer()
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
+  const [selectedBackground, setSelectedBackground] = useState("/background/livingroom.jpg")
+  const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false)
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null)
+  const [activeCall, setActiveCall] = useState<MediaConnection | null>(null)
+  const [isAudioMuted, setIsAudioMuted] = useState(false)
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [callStatus, setCallStatus] = useState<"idle" | "connecting" | "connected" | "ending">("idle")
+  const [callDuration, setCallDuration] = useState(0)
+  const [callStartTime, setCallStartTime] = useState<number | null>(null)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const { toast } = useToast()
 
   // Flag to track if background removal is in progress
-  const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false);
+  const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false)
   // Ref to store the processed stream
-  const processedStreamRef = useRef<MediaStream | null>(null);
+  const processedStreamRef = useRef<MediaStream | null>(null)
   // Ref to track if we need to update the remote stream
-  const needsRemoteUpdateRef = useRef<boolean>(false);
+  const needsRemoteUpdateRef = useRef<boolean>(false)
 
   // Add these new state variables after the other state declarations (around line 30)
   const {
@@ -59,14 +54,12 @@ export default function Home() {
     startSharing: startScreenShareHook,
     stopSharing: stopScreenShareHook,
     error: screenShareError,
-  } = useScreenShare({ keepAliveInBackground: true });
-  const [previousStream, setPreviousStream] = useState<MediaStream | null>(
-    null
-  );
-  const [isPageVisible, setIsPageVisible] = useState(true);
-  const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  } = useScreenShare({ keepAliveInBackground: true })
+  const [previousStream, setPreviousStream] = useState<MediaStream | null>(null)
+  const [isPageVisible, setIsPageVisible] = useState(true)
+  const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null)
   // Add this state variable after the other state declarations (around line 30)
-  const [shouldMirror, setShouldMirror] = useState(false);
+  const [shouldMirror, setShouldMirror] = useState(false)
 
   // Add this ref at the top of the component with the other refs
 
@@ -83,288 +76,269 @@ export default function Home() {
     startStream,
     devices,
     currentDeviceIndex,
-  } = useCameraSwitch();
+  } = useCameraSwitch()
 
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const backgroundImageRef = useRef<HTMLImageElement | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const backgroundImageRef = useRef<HTMLImageElement | null>(null)
 
   // Preload background images
   const preloadImages = useCallback((imagePaths: string[]) => {
     return Promise.all(
       imagePaths.map((path) => {
         return new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.src = path;
+          const img = new Image()
+          img.crossOrigin = "anonymous"
+          img.src = path
           img.onload = () => {
-            console.log(`✅ Preloaded: ${path}`);
-            resolve(img);
-          };
+            console.log(`✅ Preloaded: ${path}`)
+            resolve(img)
+          }
           img.onerror = () => {
-            console.error(`❌ Failed to preload: ${path}`);
-            reject(new Error(`Failed to load image: ${path}`));
-          };
-        });
-      })
-    );
-  }, []);
+            console.error(`❌ Failed to preload: ${path}`)
+            reject(new Error(`Failed to load image: ${path}`))
+          }
+        })
+      }),
+    )
+  }, [])
 
-  // Memoize the shouldMirrorStream function
+  // 1. Update the updateMirrorState function to be more reliable for front cameras
   const updateMirrorState = useCallback(() => {
-    // If it's explicitly a front camera, mirror it
-    if (currentCameraName === "Front Camera") {
-      setShouldMirror(true);
-      return;
-    }
+    // Default to true for most common cases (laptops, mobile front cameras)
+    let shouldMirrorValue = true
 
-    // For devices with only one camera (like laptops), assume it's front-facing
-    if (!hasMultipleCameras) {
-      setShouldMirror(true);
-      return;
-    }
-
-    // For other cases, check if the camera label contains keywords suggesting it's front-facing
-    if (devices && devices.length > 0) {
-      const currentDevice = devices[currentDeviceIndex];
+    // Only consider not mirroring if we have multiple cameras and can identify them
+    if (hasMultipleCameras && devices && devices.length > 1 && currentDeviceIndex >= 0) {
+      const currentDevice = devices[currentDeviceIndex]
       if (currentDevice && currentDevice.label) {
-        const label = currentDevice.label.toLowerCase();
-        setShouldMirror(
-          label.includes("front") ||
-            label.includes("user") ||
-            label.includes("face")
-        );
-        return;
+        const label = currentDevice.label.toLowerCase()
+        // Only set to false if we're confident it's a back camera
+        if (label.includes("back") || label.includes("rear") || label.includes("environment")) {
+          shouldMirrorValue = false
+          console.log("Detected back camera, disabling mirroring")
+        } else {
+          console.log("Detected front camera or unspecified camera, enabling mirroring")
+        }
       }
+    } else {
+      console.log("Single camera device detected, enabling mirroring by default")
     }
 
-    setShouldMirror(false);
-  }, [currentCameraName, hasMultipleCameras, devices, currentDeviceIndex]);
+    // Only update state if it's different to avoid unnecessary re-renders
+    if (shouldMirror !== shouldMirrorValue) {
+      console.log(`Setting mirror state to: ${shouldMirrorValue}`)
+      setShouldMirror(shouldMirrorValue)
+    }
+  }, [currentDeviceIndex, hasMultipleCameras, devices, shouldMirror])
 
-  // Add a useEffect to update the mirror state when camera changes
+  // Update the useEffect that initializes mirroring state to run on component mount
   useEffect(() => {
-    updateMirrorState();
-  }, [
-    currentCameraName,
-    hasMultipleCameras,
-    devices,
-    currentDeviceIndex,
-    updateMirrorState,
-  ]);
+    // Set initial mirror state when component mounts or camera changes
+    updateMirrorState()
+  }, [updateMirrorState])
 
-  // Replace the mirrorVideoStream function with this version that uses the state
+  // 2. Improve the mirrorVideoStream function to be more reliable
   const mirrorVideoStream = useCallback(
     (inputStream: MediaStream): Promise<MediaStream> => {
-      // Use the state value instead of calling shouldMirrorStream()
+      // If mirroring is not needed, return the original stream
       if (!shouldMirror) {
-        console.log("Mirroring not needed for this camera");
-        return Promise.resolve(inputStream);
+        console.log("Mirroring not needed for this camera")
+        return Promise.resolve(inputStream)
       }
 
-      console.log("Creating mirrored stream");
+      console.log("Creating mirrored stream")
 
       try {
-        const videoElement = document.createElement("video");
-        videoElement.srcObject = inputStream;
-        videoElement.autoplay = true;
-        videoElement.muted = true;
-        videoElement.playsInline = true;
+        const videoElement = document.createElement("video")
+        videoElement.srcObject = inputStream
+        videoElement.autoplay = true
+        videoElement.muted = true
+        videoElement.playsInline = true
 
-        const videoTrack = inputStream.getVideoTracks()[0];
+        const videoTrack = inputStream.getVideoTracks()[0]
         if (!videoTrack) {
-          console.error("No video track found in stream to mirror");
-          return Promise.resolve(inputStream);
+          console.error("No video track found in stream to mirror")
+          return Promise.resolve(inputStream)
         }
 
-        const settings = videoTrack.getSettings();
-        const width = settings.width || 640;
-        const height = settings.height || 480;
+        const settings = videoTrack.getSettings()
+        const width = settings.width || 640
+        const height = settings.height || 480
 
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d", { alpha: false });
+        const canvas = document.createElement("canvas")
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext("2d", { alpha: false })
 
         if (!ctx) {
-          console.error("Could not get canvas context");
-          return Promise.resolve(inputStream);
+          console.error("Could not get canvas context")
+          return Promise.resolve(inputStream)
         }
 
         // Disable image smoothing for pixel-perfect mirroring
-        ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingEnabled = false
 
         return new Promise<MediaStream>((resolve) => {
-          const mirroredStream = canvas.captureStream(30); // Use 30fps for smoother video
+          const mirroredStream = canvas.captureStream(30) // Use 30fps for smoother video
 
           // Add all audio tracks from the original stream
           inputStream.getAudioTracks().forEach((track) => {
             try {
-              mirroredStream.addTrack(track);
+              mirroredStream.addTrack(track)
             } catch (err) {
-              console.error("Error adding audio track:", err);
+              console.error("Error adding audio track:", err)
             }
-          });
+          })
 
           const drawFrame = () => {
-            if (
-              document.visibilityState === "visible" &&
-              videoElement.readyState >= 2
-            ) {
-              ctx.save();
-              ctx.clearRect(0, 0, canvas.width, canvas.height);
-              ctx.scale(-1, 1); // Mirror horizontally
-              ctx.drawImage(
-                videoElement,
-                -canvas.width,
-                0,
-                canvas.width,
-                canvas.height
-              );
-              ctx.restore();
+            if (document.visibilityState === "visible" && videoElement.readyState >= 2) {
+              ctx.save()
+              ctx.clearRect(0, 0, canvas.width, canvas.height)
+              ctx.scale(-1, 1) // Mirror horizontally
+              ctx.drawImage(videoElement, -canvas.width, 0, canvas.width, canvas.height)
+              ctx.restore()
             }
 
             if (mirroredStream.active) {
-              requestAnimationFrame(drawFrame);
+              requestAnimationFrame(drawFrame)
             }
-          };
+          }
 
           videoElement.onloadedmetadata = () => {
             videoElement
               .play()
               .then(() => {
-                console.log("✅ Started mirroring stream successfully");
+                console.log("✅ Started mirroring stream successfully")
                 // Start drawing frames
-                drawFrame();
-                resolve(mirroredStream);
+                drawFrame()
+                resolve(mirroredStream)
               })
               .catch((err) => {
-                console.error("Error playing video for mirroring:", err);
-                resolve(inputStream); // Fallback to original stream
-              });
-          };
+                console.error("Error playing video for mirroring:", err)
+                resolve(inputStream) // Fallback to original stream
+              })
+          }
 
           // Fallback if metadata doesn't load within 1 second
           setTimeout(() => {
             if (!videoElement.readyState) {
-              console.warn(
-                "Video metadata loading timeout, using original stream"
-              );
-              resolve(inputStream);
+              console.warn("Video metadata loading timeout, using original stream")
+              resolve(inputStream)
             }
-          }, 1000);
-        });
+          }, 1000)
+        })
       } catch (err) {
-        console.error("Error in mirrorVideoStream:", err);
-        return Promise.resolve(inputStream);
+        console.error("Error in mirrorVideoStream:", err)
+        return Promise.resolve(inputStream)
       }
     },
-    [shouldMirror] // Only depend on the state, not the function
-  );
+    [shouldMirror],
+  )
 
-  // Update the updateRemoteStream function to use the state
+  // Define updateRemoteStream before it's used
   const updateRemoteStream = useCallback(
     async (newStream: MediaStream) => {
-      if (!activeCall || !activeCall.peerConnection) {
-        console.log("No active call to update");
-        return;
-      }
+      if (activeCall && activeCall.peerConnection) {
+        try {
+          const senders = activeCall.peerConnection.getSenders()
+          const videoSender = senders.find((sender) => sender.track && sender.track.kind === "video")
 
-      try {
-        console.log("Starting remote stream update process...");
-
-        // Use the state value instead of calling shouldMirrorStream()
-        let streamToSend;
-        if (shouldMirror) {
-          console.log("Mirroring required for remote stream");
-          streamToSend = await mirrorVideoStream(newStream);
-        } else {
-          console.log("No mirroring needed for remote stream");
-          streamToSend = newStream;
-        }
-
-        const videoTrack = streamToSend.getVideoTracks()[0];
-        const audioTrack = streamToSend.getAudioTracks()[0];
-
-        if (!videoTrack) {
-          console.error("No video track in stream to send");
-          return;
-        }
-
-        console.log("Replacing tracks in active connection");
-
-        // Get all senders in the peer connection
-        const senders = activeCall.peerConnection.getSenders();
-
-        // Find the video sender and update it
-        const videoSender = senders.find(
-          (sender) => sender.track && sender.track.kind === "video"
-        );
-
-        if (videoSender) {
-          // Replace the track
-          await videoSender.replaceTrack(videoTrack);
-          console.log("✅ Remote video track replaced successfully");
-        } else {
-          console.error("No video sender found in peer connection");
-        }
-
-        // Find and update audio sender if it exists and we have an audio track
-        if (audioTrack) {
-          const audioSender = senders.find(
-            (sender) => sender.track && sender.track.kind === "audio"
-          );
-
-          if (audioSender) {
-            await audioSender.replaceTrack(audioTrack);
-            // Apply current mute state
-            audioTrack.enabled = !isAudioMuted;
-            console.log("✅ Remote audio track replaced successfully");
+          if (videoSender) {
+            const videoTrack = newStream.getVideoTracks()[0]
+            if (videoTrack) {
+              await videoSender.replaceTrack(videoTrack)
+              console.log("✅ Updated remote video stream")
+            } else {
+              console.warn("No video track available in the new stream")
+            }
+          } else {
+            console.warn("No video sender found to update")
           }
+
+          const audioSender = senders.find((sender) => sender.track && sender.track.kind === "audio")
+          if (audioSender) {
+            const audioTrack = newStream.getAudioTracks()[0]
+            if (audioTrack) {
+              await audioSender.replaceTrack(audioTrack)
+              console.log("✅ Updated remote audio stream")
+            } else {
+              console.warn("No audio track available in the new stream")
+            }
+          } else {
+            console.warn("No audio sender found to update")
+          }
+        } catch (error) {
+          console.error("Error updating remote stream:", error)
         }
-      } catch (error) {
-        console.error("Error updating remote stream:", error);
       }
     },
-    [activeCall, shouldMirror, mirrorVideoStream, isAudioMuted]
-  );
+    [activeCall],
+  )
 
-  // Update the useEffect that handles camera stream changes to use the state
+  // 3. Create a new function to process the camera stream for both local display and remote sending
+  const processCameraStream = useCallback(
+    async (stream: MediaStream): Promise<MediaStream> => {
+      if (!stream) return stream
+
+      try {
+        // Apply mirroring if needed
+        const processedStream = shouldMirror ? await mirrorVideoStream(stream) : stream
+
+        // Store the processed stream for later use
+        if (shouldMirror) {
+          console.log("Using mirrored stream for both local display and remote sending")
+        }
+
+        return processedStream
+      } catch (error) {
+        console.error("Error processing camera stream:", error)
+        return stream // Fallback to original stream
+      }
+    },
+    [shouldMirror, mirrorVideoStream],
+  )
+
+  // 4. Update the useEffect that handles camera stream changes to use the processed stream for local display
   useEffect(() => {
     if (cameraStream) {
       // Apply current audio mute state
-      const audioTracks = cameraStream.getAudioTracks();
+      const audioTracks = cameraStream.getAudioTracks()
       if (audioTracks.length > 0) {
         audioTracks.forEach((track) => {
-          track.enabled = !isAudioMuted;
-        });
+          track.enabled = !isAudioMuted
+        })
       }
 
       // Apply current video enabled state
-      const videoTracks = cameraStream.getVideoTracks();
+      const videoTracks = cameraStream.getVideoTracks()
       if (videoTracks.length > 0) {
         videoTracks.forEach((track) => {
-          track.enabled = isVideoEnabled;
-        });
+          track.enabled = isVideoEnabled
+        })
       }
 
       // Set the local stream
-      setLocalStream(cameraStream);
+      setLocalStream(cameraStream)
 
-      // Update the video source if background removal is not enabled
-      if (!backgroundRemovalEnabled && localVideoRef.current) {
-        localVideoRef.current.srcObject = cameraStream;
-        // Apply CSS mirroring for local video display based on state
-        localVideoRef.current.style.transform = shouldMirror
-          ? "scale(-1, 1)"
-          : "none";
-      }
+      // Process the stream for both local display and remote sending
+      ;(async () => {
+        if (!backgroundRemovalEnabled) {
+          const processedStream = await processCameraStream(cameraStream)
 
-      // If we're in a call and background removal is not enabled, update the remote stream
-      if (activeCall && !backgroundRemovalEnabled) {
-        // Let updateRemoteStream handle the mirroring decision
-        updateRemoteStream(cameraStream);
-      }
+          // Update local video display with the processed stream
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = processedStream
+            // Remove any CSS transform - we're using the processed stream directly
+          }
+
+          // If we're in a call, update the remote stream
+          if (activeCall) {
+            await updateRemoteStream(processedStream)
+          }
+        }
+      })()
     }
   }, [
     cameraStream,
@@ -373,8 +347,8 @@ export default function Home() {
     activeCall,
     backgroundRemovalEnabled,
     updateRemoteStream,
-    shouldMirror,
-  ]);
+    processCameraStream,
+  ])
 
   // Show toast if camera error occurs
   useEffect(() => {
@@ -383,9 +357,9 @@ export default function Home() {
         title: "Camera Error",
         description: cameraError,
         variant: "destructive",
-      });
+      })
     }
-  }, [cameraError, toast]);
+  }, [cameraError, toast])
 
   // Preload background images when the app starts
   useEffect(() => {
@@ -394,238 +368,265 @@ export default function Home() {
       "/background/livingroom2.jpg",
       "/background/livingroom3.jpg",
       "/background/office.jpg",
-    ]).then(() => console.log("✅ All backgrounds preloaded!"));
-  }, [preloadImages]);
+    ]).then(() => console.log("✅ All backgrounds preloaded!"))
+  }, [preloadImages])
 
   // Set remote video source when remote stream changes
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.srcObject = remoteStream
     }
-  }, [remoteStream]);
+  }, [remoteStream])
 
   // Handle call timer
   useEffect(() => {
     if (callStatus === "connected" && !callStartTime) {
-      const startTime = Date.now(); // Fresh timestamp
-      setCallStartTime(startTime);
+      const startTime = Date.now() // Fresh timestamp
+      setCallStartTime(startTime)
 
       timerRef.current = setInterval(() => {
-        setCallDuration(Math.floor((Date.now() - startTime) / 1000)); // Use fresh timestamp
-      }, 1000);
+        setCallDuration(Math.floor((Date.now() - startTime) / 1000)) // Use fresh timestamp
+      }, 1000)
     } else if (callStatus !== "connected") {
       if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+        clearInterval(timerRef.current)
+        timerRef.current = null
       }
-      setCallStartTime(null);
-      setCallDuration(0);
+      setCallStartTime(null)
+      setCallDuration(0)
     }
 
     return () => {
       if (timerRef.current) {
-        clearInterval(timerRef.current);
+        clearInterval(timerRef.current)
       }
-    };
-  }, [callStatus]); // Remove callStartTime from dependencies
+    }
+  }, [callStatus]) // Remove callStartTime from dependencies
 
   // Format call duration as MM:SS
   const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs
-      .toString()
-      .padStart(2, "0")}`;
-  };
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
 
   // Pre-process the stream with mirroring if needed before passing to background removal
   const prepareStreamForBackgroundRemoval = useCallback(
     async (stream: MediaStream): Promise<MediaStream> => {
       // If mirroring is needed, apply it before background removal
       if (shouldMirror) {
-        console.log("Applying mirroring before background removal");
-        return await mirrorVideoStream(stream);
+        console.log("Applying mirroring before background removal")
+        return await mirrorVideoStream(stream)
       }
-      return stream;
+      return stream
     },
-    [shouldMirror, mirrorVideoStream]
-  );
+    [shouldMirror, mirrorVideoStream],
+  )
+
+  // Define handleIncomingCall before it's used
+  const handleIncomingCall = useCallback(
+    (call: MediaConnection) => {
+      console.log("📞 Incoming call from:", call.peer)
+      setCallStatus("connecting")
+      setIsLoading(true)
+
+      // Answer the call with the current local stream
+      if (localStream) {
+        call.answer(localStream)
+        setActiveCall(call) // Store the call reference
+
+        call.on("stream", (incomingStream) => {
+          console.log("🎬 Received Remote Stream:", incomingStream)
+          setRemoteStream(incomingStream)
+          setCallStatus("connected")
+          setIsLoading(false)
+        })
+
+        call.on("close", () => {
+          console.log("Call closed")
+          setRemoteStream(null)
+          setCallStatus("idle")
+          setActiveCall(null)
+        })
+
+        call.on("error", (err) => {
+          console.error("Call error:", err)
+          setCallStatus("idle")
+          setIsLoading(false)
+          toast({
+            title: "Call Error",
+            description: err.message || "An error occurred during the call",
+          })
+        })
+      } else {
+        console.error("No local stream available to answer call")
+        setCallStatus("idle")
+        setIsLoading(false)
+        toast({
+          title: "Call Error",
+          description: "No camera stream available to answer the call",
+          variant: "destructive",
+        })
+      }
+    },
+    [localStream, toast],
+  )
 
   // Update the handleBackgroundRemovalToggle function to use the state
   const handleBackgroundRemovalToggle = useCallback(
     (enabled: boolean | ((prev: boolean) => boolean)) => {
       // Convert function-style state updates to boolean
-      const newEnabled =
-        typeof enabled === "function"
-          ? enabled(backgroundRemovalEnabled)
-          : enabled;
+      const newEnabled = typeof enabled === "function" ? enabled(backgroundRemovalEnabled) : enabled
 
       // If already in the desired state or processing, do nothing
-      if (
-        backgroundRemovalEnabled === newEnabled ||
-        isBackgroundProcessing ||
-        isLoading
-      ) {
-        return;
+      if (backgroundRemovalEnabled === newEnabled || isBackgroundProcessing || isLoading) {
+        return
       }
 
-      console.log(`Background removal toggle: ${newEnabled ? "ON" : "OFF"}`);
+      console.log(`Background removal toggle: ${newEnabled ? "ON" : "OFF"}`)
 
       // Set loading state
-      setIsLoading(true);
-      setIsBackgroundProcessing(true);
+      setIsLoading(true)
+      setIsBackgroundProcessing(true)
 
       // Update the state immediately for UI feedback
-      setBackgroundRemovalEnabled(newEnabled);
+      setBackgroundRemovalEnabled(newEnabled)
 
       // Use an async IIFE to handle the async operations
-      (async () => {
+      ;(async () => {
         try {
           if (!newEnabled) {
             // Turning OFF background removal
-            console.log("Turning OFF background removal");
+            console.log("Turning OFF background removal")
 
             // Make sure we have a valid local stream before stopping background removal
             if (!localStream) {
-              throw new Error("No camera stream available");
+              throw new Error("No camera stream available")
             }
 
             // Create a clone of the local stream to ensure we have a fresh stream
             const freshStream = await navigator.mediaDevices.getUserMedia({
               video: {
-                deviceId: localStream.getVideoTracks()[0]?.getSettings()
-                  ?.deviceId
+                deviceId: localStream.getVideoTracks()[0]?.getSettings()?.deviceId
                   ? {
-                      exact: localStream.getVideoTracks()[0].getSettings()
-                        .deviceId,
+                      exact: localStream.getVideoTracks()[0].getSettings().deviceId,
                     }
                   : undefined,
                 width: { ideal: 1280 },
                 height: { ideal: 720 },
               },
               audio: localStream.getAudioTracks().length > 0,
-            });
+            })
 
             // Apply current audio mute state to the fresh stream
             if (freshStream.getAudioTracks().length > 0) {
               freshStream.getAudioTracks().forEach((track) => {
-                track.enabled = !isAudioMuted;
-              });
+                track.enabled = !isAudioMuted
+              })
             }
 
             // Apply current video enabled state to the fresh stream
             if (freshStream.getVideoTracks().length > 0) {
               freshStream.getVideoTracks().forEach((track) => {
-                track.enabled = isVideoEnabled;
-              });
+                track.enabled = isVideoEnabled
+              })
             }
 
             // Stop the rendering loop and clean up WebGL resources
-            BackgroundProcessor.stopRendering();
-            BackgroundProcessor.cleanup();
+            BackgroundProcessor.stopRendering()
+            BackgroundProcessor.cleanup()
 
             // Clear the processed stream reference
-            processedStreamRef.current = null;
+            processedStreamRef.current = null
 
             // Set the local stream to the fresh stream
-            setLocalStream(freshStream);
+            setLocalStream(freshStream)
 
-            // Set the video source to the fresh stream immediately to avoid black screen
+            // Process the fresh stream for display
+            const processedStream = await processCameraStream(freshStream)
+
+            // Set the video source to the processed stream immediately to avoid black screen
             if (localVideoRef.current) {
-              localVideoRef.current.srcObject = freshStream;
-              console.log("Set video source to fresh stream");
-              // Apply CSS mirroring for local video display based on state
-              localVideoRef.current.style.transform = shouldMirror
-                ? "scale(-1, 1)"
-                : "none";
+              localVideoRef.current.srcObject = processedStream
+              console.log("Set video source to processed stream")
             }
 
             // If in a call, update the remote stream
             if (activeCall) {
-              // Here we'll let updateRemoteStream handle the mirroring
-              await updateRemoteStream(freshStream);
-              needsRemoteUpdateRef.current = false;
+              await updateRemoteStream(processedStream)
+              needsRemoteUpdateRef.current = false
             }
           } else {
             // Turning ON background removal
-            console.log("Turning ON background removal");
+            console.log("Turning ON background removal")
 
             if (!localStream) {
-              throw new Error("No camera stream available");
+              throw new Error("No camera stream available")
             }
 
             // First, apply mirroring if needed before passing to background removal
-            const preparedStream = await prepareStreamForBackgroundRemoval(
-              localStream
-            );
+            const preparedStream = await prepareStreamForBackgroundRemoval(localStream)
 
             // Process the stream with background removal
-            const processedStream =
-              await BackgroundProcessor.processStreamWithBackgroundRemoval({
-                stream: preparedStream,
-                selectedBackground,
-                isAudioMuted,
-                canvasRef,
-                backgroundImageRef,
-                setLocalStream: (stream) => {
-                  // Store the processed stream in the ref
-                  processedStreamRef.current = stream;
+            const processedStream = await BackgroundProcessor.processStreamWithBackgroundRemoval({
+              stream: preparedStream,
+              selectedBackground,
+              isAudioMuted,
+              canvasRef,
+              backgroundImageRef,
+              setLocalStream: (stream) => {
+                // Store the processed stream in the ref
+                processedStreamRef.current = stream
 
-                  // Set the video source to the processed stream immediately
-                  if (localVideoRef.current) {
-                    localVideoRef.current.srcObject = stream;
-                    console.log("Set video source to processed stream");
-                    // Don't apply CSS mirroring here as the background removal process
-                    // should handle mirroring in its own canvas rendering
-                  }
-                },
-              });
+                // Set the video source to the processed stream immediately
+                if (localVideoRef.current) {
+                  localVideoRef.current.srcObject = stream
+                  console.log("Set video source to processed stream")
+                }
+              },
+            })
 
             // Store the processed stream in the ref
-            processedStreamRef.current = processedStream;
+            processedStreamRef.current = processedStream
 
             // If in a call, update the remote stream
             if (activeCall) {
-              // Here we'll let updateRemoteStream handle the mirroring
-              await updateRemoteStream(processedStream);
-              needsRemoteUpdateRef.current = false;
+              await updateRemoteStream(processedStream)
+              needsRemoteUpdateRef.current = false
             }
           }
         } catch (error) {
-          console.error("Error toggling background removal:", error);
+          console.error("Error toggling background removal:", error)
 
           // If there was an error, revert to the previous state
-          setBackgroundRemovalEnabled(!newEnabled);
+          setBackgroundRemovalEnabled(!newEnabled)
 
           // Show error toast
           toast({
             title: "Background Removal Error",
-            description:
-              "Failed to toggle background removal. Please try again.",
+            description: "Failed to toggle background removal. Please try again.",
             variant: "destructive",
-          });
+          })
 
           // Clean up if needed
           if (newEnabled) {
-            BackgroundProcessor.stopRendering();
-            BackgroundProcessor.cleanup();
-            processedStreamRef.current = null;
+            BackgroundProcessor.stopRendering()
+            BackgroundProcessor.cleanup()
+            processedStreamRef.current = null
 
             // Make sure we restore the raw stream to the video element
             if (localVideoRef.current && localStream) {
-              localVideoRef.current.srcObject = localStream;
-              // Apply CSS mirroring for local video display based on state
-              localVideoRef.current.style.transform = shouldMirror
-                ? "scale(-1, 1)"
-                : "none";
+              // Process the stream for display
+              const processedStream = await processCameraStream(localStream)
+              localVideoRef.current.srcObject = processedStream
             }
           }
         } finally {
           // Clear loading states
-          setIsLoading(false);
-          setIsBackgroundProcessing(false);
+          setIsLoading(false)
+          setIsBackgroundProcessing(false)
         }
-      })();
+      })()
     },
     [
       backgroundRemovalEnabled,
@@ -638,204 +639,79 @@ export default function Home() {
       activeCall,
       toast,
       updateRemoteStream,
-      shouldMirror,
       prepareStreamForBackgroundRemoval,
-    ]
-  );
-
-  // Memoize the handleIncomingCall function
-  const handleIncomingCall = useCallback(
-    async (incomingCall: MediaConnection) => {
-      console.log("📞 Incoming call from:", incomingCall.peer);
-      setCallStatus("connecting");
-      setIsLoading(true);
-
-      try {
-        // Make sure we have a valid local stream before answering
-        let streamToUse = localStream;
-
-        // If we don't have a local stream yet, try to get one using the hook's startStream
-        if (!streamToUse && startStream) {
-          console.log("No local stream available, attempting to create one...");
-          const currentDevice =
-            devices && devices.length > 0
-              ? devices[currentDeviceIndex]?.deviceId
-              : undefined;
-          streamToUse = await startStream(currentDevice || "", true);
-
-          if (streamToUse) {
-            console.log("Successfully created stream for incoming call");
-            setLocalStream(streamToUse);
-          } else {
-            throw new Error("Failed to create camera stream for outgoing call");
-          }
-        }
-
-        if (!streamToUse) {
-          throw new Error("No camera stream available");
-        }
-
-        // Use the processed stream if background removal is enabled
-        let finalStream =
-          backgroundRemovalEnabled && processedStreamRef.current
-            ? processedStreamRef.current
-            : streamToUse;
-
-        // Set local video display - always use original stream with CSS mirroring
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = streamToUse;
-        }
-
-        // Mirror the stream if needed for the outgoing call based on state
-        if (shouldMirror) {
-          console.log("Mirroring incoming call stream for remote peer");
-          finalStream = await mirrorVideoStream(finalStream);
-        }
-
-        // Check if we have audio tracks
-        const audioTracks = finalStream.getAudioTracks();
-        console.log(`Audio tracks in stream: ${audioTracks.length}`);
-
-        if (audioTracks.length > 0) {
-          // Ensure audio track is enabled unless explicitly muted
-          audioTracks[0].enabled = !isAudioMuted;
-          console.log(`Audio track enabled: ${!isAudioMuted}`);
-        }
-
-        // Set the connected peer ID
-        setConnectedPeerId(incomingCall.peer);
-
-        // Answer the call with our stream
-        incomingCall.answer(finalStream);
-        setActiveCall(incomingCall); // Store the call reference
-        console.log("✅ Auto-Answered the call");
-
-        incomingCall.on("stream", (incomingStream) => {
-          console.log("🎬 Receiving Remote Video Stream:", incomingStream);
-
-          // Log audio tracks in incoming stream
-          const incomingAudioTracks = incomingStream.getAudioTracks();
-          console.log(
-            `Incoming stream audio tracks: ${incomingAudioTracks.length}`
-          );
-
-          // Log video tracks in incoming stream
-          const incomingVideoTracks = incomingStream.getVideoTracks();
-          console.log(
-            `Incoming stream video tracks: ${incomingVideoTracks.length}`
-          );
-
-          if (incomingVideoTracks.length === 0) {
-            console.warn("No video tracks in incoming stream!");
-          }
-
-          setRemoteStream(incomingStream);
-          setCallStatus("connected");
-          setIsLoading(false);
-        });
-
-        incomingCall.on("close", () => {
-          console.log("❌ Call Ended");
-          setRemoteStream(null);
-          setCallStatus("idle");
-        });
-      } catch (error) {
-        console.error("Error handling incoming call:", error);
-        setCallStatus("idle");
-        setIsLoading(false);
-        toast({
-          title: "Call Error",
-          description:
-            "Could not answer the call. Please check your camera and microphone.",
-          variant: "destructive",
-        });
-      }
-    },
-    [
-      localStream,
-      startStream,
-      devices,
-      currentDeviceIndex,
-      backgroundRemovalEnabled,
-      shouldMirror,
-      mirrorVideoStream,
-      isAudioMuted,
-      setConnectedPeerId,
-      toast,
-    ]
-  );
+      processCameraStream,
+    ],
+  )
 
   // Update the useEffect that handles incoming calls to use our memoized handleIncomingCall function
   useEffect(() => {
-    if (!peer) return;
+    if (!peer) return
 
-    peer.on("call", handleIncomingCall);
+    peer.on("call", handleIncomingCall)
 
     return () => {
-      peer.off("call", handleIncomingCall);
-    };
-  }, [peer, handleIncomingCall]); // Simplified dependency array since handleIncomingCall is now memoized
+      peer.off("call", handleIncomingCall)
+    }
+  }, [peer, handleIncomingCall]) // Simplified dependency array since handleIncomingCall is now memoized
 
   // Load background image when selected
   useEffect(() => {
     // Preload the selected background
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = selectedBackground;
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.src = selectedBackground
     img.onload = () => {
-      backgroundImageRef.current = img;
-      console.log(`✅ Background loaded: ${selectedBackground}`);
+      backgroundImageRef.current = img
+      console.log(`✅ Background loaded: ${selectedBackground}`)
 
       // If background removal is already enabled, we need to reprocess with the new background
       if (backgroundRemovalEnabled && localStream) {
         // Flag that we need to update
-        needsRemoteUpdateRef.current = true;
+        needsRemoteUpdateRef.current = true
 
         // Process with new background
-        (async () => {
+        ;(async () => {
           try {
-            setIsLoading(true);
+            setIsLoading(true)
 
             // First, apply mirroring if needed before passing to background removal
-            const preparedStream = await prepareStreamForBackgroundRemoval(
-              localStream
-            );
+            const preparedStream = await prepareStreamForBackgroundRemoval(localStream)
 
-            const processedStream =
-              await BackgroundProcessor.processStreamWithBackgroundRemoval({
-                stream: preparedStream,
-                selectedBackground,
-                isAudioMuted,
-                canvasRef,
-                backgroundImageRef,
-                setLocalStream: (stream) => {
-                  processedStreamRef.current = stream;
+            const processedStream = await BackgroundProcessor.processStreamWithBackgroundRemoval({
+              stream: preparedStream,
+              selectedBackground,
+              isAudioMuted,
+              canvasRef,
+              backgroundImageRef,
+              setLocalStream: (stream) => {
+                processedStreamRef.current = stream
 
-                  // Update the video source immediately
-                  if (localVideoRef.current) {
-                    localVideoRef.current.srcObject = stream;
-                  }
-                },
-              });
+                // Update the video source immediately
+                if (localVideoRef.current) {
+                  localVideoRef.current.srcObject = stream
+                }
+              },
+            })
 
             // If in a call, update the remote stream
             if (activeCall) {
-              await updateRemoteStream(processedStream);
-              needsRemoteUpdateRef.current = false;
+              await updateRemoteStream(processedStream)
+              needsRemoteUpdateRef.current = false
             }
           } catch (error) {
-            console.error("Error updating background:", error);
+            console.error("Error updating background:", error)
             toast({
               title: "Background Update Error",
               description: "Failed to update background. Please try again.",
               variant: "destructive",
-            });
+            })
           } finally {
-            setIsLoading(false);
+            setIsLoading(false)
           }
-        })();
+        })()
       }
-    };
+    }
   }, [
     selectedBackground,
     backgroundRemovalEnabled,
@@ -845,7 +721,7 @@ export default function Home() {
     toast,
     updateRemoteStream,
     prepareStreamForBackgroundRemoval,
-  ]);
+  ])
 
   // Handle orientation changes for mobile devices
   useEffect(() => {
@@ -853,31 +729,31 @@ export default function Home() {
       // If background removal is active, we need to reprocess with the new orientation
       if (backgroundRemovalEnabled && localStream) {
         // Turn off and then back on to reset the canvas dimensions
-        (async () => {
+        ;(async () => {
           try {
-            setIsLoading(true);
-            await handleBackgroundRemovalToggle(false);
+            setIsLoading(true)
+            await handleBackgroundRemovalToggle(false)
 
             // Short delay to ensure clean transition
             setTimeout(() => {
-              handleBackgroundRemovalToggle(true);
-              setIsLoading(false);
-            }, 500);
+              handleBackgroundRemovalToggle(true)
+              setIsLoading(false)
+            }, 500)
           } catch (error) {
-            console.error("Error handling orientation change:", error);
-            setIsLoading(false);
+            console.error("Error handling orientation change:", error)
+            setIsLoading(false)
           }
-        })();
+        })()
       }
-    };
+    }
 
     // Listen for orientation changes
-    window.addEventListener("orientationchange", handleOrientationChange);
+    window.addEventListener("orientationchange", handleOrientationChange)
 
     return () => {
-      window.removeEventListener("orientationchange", handleOrientationChange);
-    };
-  }, [backgroundRemovalEnabled, localStream, handleBackgroundRemovalToggle]);
+      window.removeEventListener("orientationchange", handleOrientationChange)
+    }
+  }, [backgroundRemovalEnabled, localStream, handleBackgroundRemovalToggle])
 
   // Add this function after the startScreenShare function
 
@@ -889,333 +765,319 @@ export default function Home() {
         title: "No Active Call",
         description: "You must be in a call to share your screen",
         variant: "destructive",
-      });
-      return;
+      })
+      return
     }
 
     try {
-      setIsLoading(true);
-      console.log("Starting screen sharing with worker-based keep-alive...");
+      setIsLoading(true)
+      console.log("Starting screen sharing with worker-based keep-alive...")
 
       // Save the current stream to restore later
-      setPreviousStream(localStream);
+      setPreviousStream(localStream)
 
       // Start screen sharing using the hook
-      const stream = await startScreenShareHook();
+      const stream = await startScreenShareHook()
 
       if (!stream) {
-        throw new Error("Failed to get screen sharing stream");
+        throw new Error("Failed to get screen sharing stream")
       }
 
       // Update the local video display
       if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.style.display = "none";
+        localVideoRef.current.srcObject = stream
+        localVideoRef.current.style.display = "none"
       }
 
       // Update the remote stream
-      await updateRemoteStream(stream);
+      await updateRemoteStream(stream)
 
       // Set document title to indicate screen sharing is active
-      const originalTitle = document.title;
-      document.title = "📺 Screen Sharing Active - " + originalTitle;
+      const originalTitle = document.title
+      document.title = "📺 Screen Sharing Active - " + originalTitle
 
       // Store original title to restore later
-      document.body.dataset.originalTitle = originalTitle;
+      document.body.dataset.originalTitle = originalTitle
 
-      setIsLoading(false);
+      setIsLoading(false)
       toast({
         title: "Screen Sharing Started",
         description: "Your screen is now being shared",
-      });
+      })
 
       // Add a class to indicate screen sharing is active
-      document.body.classList.add("screen-sharing-active");
+      document.body.classList.add("screen-sharing-active")
 
-      return stream;
+      return stream
     } catch (error) {
-      console.error("Error starting screen share:", error);
-      setIsLoading(false);
+      console.error("Error starting screen share:", error)
+      setIsLoading(false)
       toast({
         title: "Screen Sharing Failed",
         description: "Failed to start screen sharing. Please try again.",
         variant: "destructive",
-      });
-      return null;
+      })
+      return null
     }
-  };
+  }
 
   // Update the stopScreenShare function to clean up the canvas-based sharing
   const stopScreenShare = async () => {
     try {
-      setIsLoading(true);
-      console.log("Stopping screen sharing...");
+      setIsLoading(true)
+      console.log("Stopping screen sharing...")
 
       // Stop screen sharing using the hook
-      stopScreenShareHook();
+      stopScreenShareHook()
 
       // Restore the previous stream if available
       if (previousStream) {
-        setLocalStream(previousStream);
+        setLocalStream(previousStream)
+
+        // Process the stream for display
+        const processedStream = await processCameraStream(previousStream)
 
         // Update the local video display
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = previousStream || cameraStream;
-          localVideoRef.current.style.display = "block";
+          localVideoRef.current.srcObject = processedStream
+          localVideoRef.current.style.display = "block"
         }
 
         // Update the remote stream
-        await updateRemoteStream(previousStream);
+        await updateRemoteStream(processedStream)
       } else if (cameraStream) {
         // Fallback to camera stream if previous stream is not available
-        setLocalStream(cameraStream);
+        setLocalStream(cameraStream)
+
+        // Process the stream for display
+        const processedStream = await processCameraStream(cameraStream)
 
         // Update the local video display
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = cameraStream;
-          localVideoRef.current.style.display = "block";
+          localVideoRef.current.srcObject = processedStream
+          localVideoRef.current.style.display = "block"
         }
 
         // Update the remote stream
-        await updateRemoteStream(cameraStream);
+        await updateRemoteStream(processedStream)
       }
 
       // Reset state
-      setPreviousStream(null);
+      setPreviousStream(null)
 
       // Clear keep-alive interval if it exists
       if (keepAliveIntervalRef.current) {
-        clearInterval(keepAliveIntervalRef.current);
-        keepAliveIntervalRef.current = null;
+        clearInterval(keepAliveIntervalRef.current)
+        keepAliveIntervalRef.current = null
       }
 
       // Remove screen sharing class
-      document.body.classList.remove("screen-sharing-active");
+      document.body.classList.remove("screen-sharing-active")
 
       // Restore original document title
       if (document.body.dataset.originalTitle) {
-        document.title = document.body.dataset.originalTitle;
-        delete document.body.dataset.originalTitle;
+        document.title = document.body.dataset.originalTitle
+        delete document.body.dataset.originalTitle
       }
 
-      setIsLoading(false);
+      setIsLoading(false)
 
       toast({
         title: "Screen Sharing Stopped",
         description: "Returned to camera view",
-      });
+      })
     } catch (error) {
-      console.error("Error stopping screen share:", error);
-      setIsLoading(false);
+      console.error("Error stopping screen share:", error)
+      setIsLoading(false)
       toast({
         title: "Error",
         description: "Failed to stop screen sharing",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
   // Update the startCall function to use the state
   const startCall = async () => {
     if (!peer) {
       toast({
         title: "Connection Error",
-        description:
-          "Peer connection not initialized. Please refresh the page and try again.",
-        variant: "destructive",
-      });
-      return;
+        description: "Peer connection not initialized. Please refresh the page and try again.",
+      })
+      return
     }
 
     if (!connectedPeerId) {
       toast({
         title: "Connection Error",
         description: "No peer connected. Please connect to a peer first.",
-        variant: "destructive",
-      });
-      return;
+      })
+      return
     }
 
-    setCallStatus("connecting");
-    setIsLoading(true);
+    setCallStatus("connecting")
+    setIsLoading(true)
 
     try {
       // Make sure we have a valid local stream
-      let streamToUse = localStream;
+      let streamToUse = localStream
 
       // If we don't have a local stream yet, try to get one using the hook's startStream
       if (!streamToUse && startStream) {
-        console.log("No local stream available, attempting to create one...");
-        const currentDevice =
-          devices && devices.length > 0
-            ? devices[currentDeviceIndex]?.deviceId
-            : undefined;
-        streamToUse = await startStream(currentDevice || "", true);
+        console.log("No local stream available, attempting to create one...")
+        const currentDevice = devices && devices.length > 0 ? devices[currentDeviceIndex]?.deviceId : undefined
+        streamToUse = await startStream(currentDevice || "", true)
 
         if (streamToUse) {
-          console.log("Successfully created stream for outgoing call");
-          setLocalStream(streamToUse);
+          console.log("Successfully created stream for outgoing call")
+          setLocalStream(streamToUse)
         } else {
-          throw new Error("Failed to create camera stream for outgoing call");
+          throw new Error("Failed to create camera stream for outgoing call")
         }
       }
 
       if (!streamToUse) {
-        throw new Error("No camera stream available");
+        throw new Error("No camera stream available")
       }
 
-      // Use the processed stream if background removal is enabled
-      let finalStream =
-        backgroundRemovalEnabled && processedStreamRef.current
-          ? processedStreamRef.current
-          : streamToUse;
+      // Process the stream for both local display and remote sending
+      let finalStream
+      if (backgroundRemovalEnabled && processedStreamRef.current) {
+        finalStream = processedStreamRef.current
+      } else {
+        finalStream = await processCameraStream(streamToUse)
 
-      // Set local video display - always use original stream with CSS mirroring
-      console.log("🎥 Setting local video stream...");
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = streamToUse;
-      }
-
-      // Mirror the stream if needed for the outgoing call based on state
-      if (shouldMirror) {
-        console.log("Mirroring outgoing stream for remote peer");
-        finalStream = await mirrorVideoStream(finalStream);
+        // Update local video display with the processed stream
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = finalStream
+        }
       }
 
       // Log audio tracks
-      const audioTracks = finalStream.getAudioTracks();
-      console.log(`Audio tracks in outgoing stream: ${audioTracks.length}`);
+      const audioTracks = finalStream.getAudioTracks()
+      console.log(`Audio tracks in outgoing stream: ${audioTracks.length}`)
 
       if (audioTracks.length > 0) {
         // Make sure audio state is correctly applied
-        audioTracks[0].enabled = !isAudioMuted;
-        console.log(`Audio track enabled for call: ${!isAudioMuted}`);
+        audioTracks[0].enabled = !isAudioMuted
+        console.log(`Audio track enabled for call: ${!isAudioMuted}`)
       } else {
-        console.warn("No audio tracks in outgoing stream!");
+        console.warn("No audio tracks in outgoing stream!")
       }
 
-      console.log("📞 Calling peer:", connectedPeerId);
+      console.log("📞 Calling peer:", connectedPeerId)
 
       // Check if peer is still valid before making the call
       if (!peer || peer.destroyed) {
-        throw new Error("Peer connection is no longer valid");
+        throw new Error("Peer connection is no longer valid")
       }
 
-      // Make the call with the mirrored stream if needed
-      const call = peer.call(connectedPeerId, finalStream);
+      // Make the call with the processed stream
+      const call = peer.call(connectedPeerId, finalStream)
 
       if (!call) {
-        throw new Error("Failed to create call object");
+        throw new Error("Failed to create call object")
       }
 
-      setActiveCall(call); // Store the call reference
+      setActiveCall(call) // Store the call reference
 
       // Set up event listeners
       call.on("stream", (incomingStream) => {
-        console.log("🎬 Received Remote Stream:", incomingStream);
+        console.log("🎬 Received Remote Stream:", incomingStream)
 
         // Log audio tracks in incoming stream
-        const incomingAudioTracks = incomingStream.getAudioTracks();
-        console.log(
-          `Incoming stream audio tracks: ${incomingAudioTracks.length}`
-        );
+        const incomingAudioTracks = incomingStream.getAudioTracks()
+        console.log(`Incoming stream audio tracks: ${incomingAudioTracks.length}`)
 
         // Log video tracks in incoming stream
-        const incomingVideoTracks = incomingStream.getVideoTracks();
-        console.log(
-          `Incoming stream video tracks: ${incomingVideoTracks.length}`
-        );
+        const incomingVideoTracks = incomingStream.getVideoTracks()
+        console.log(`Incoming stream video tracks: ${incomingVideoTracks.length}`)
 
         if (incomingVideoTracks.length === 0) {
-          console.warn("No video tracks in incoming stream!");
+          console.warn("No video tracks in incoming stream!")
         }
 
-        setRemoteStream(incomingStream);
-        setCallStatus("connected");
-        setIsLoading(false);
-      });
+        setRemoteStream(incomingStream)
+        setCallStatus("connected")
+        setIsLoading(false)
+      })
 
       call.on("error", (err) => {
-        console.error("Call error:", err);
-        setCallStatus("idle");
-        setIsLoading(false);
+        console.error("Call error:", err)
+        setCallStatus("idle")
+        setIsLoading(false)
         toast({
           title: "Call Error",
           description: err.message || "An error occurred during the call",
-          variant: "destructive",
-        });
-      });
+        })
+      })
 
       call.on("close", () => {
-        console.log("Call closed");
-        setRemoteStream(null);
-        setCallStatus("idle");
-      });
+        console.log("Call closed")
+        setRemoteStream(null)
+        setCallStatus("idle")
+      })
 
       // Set a timeout in case the call doesn't connect
       const timeout = setTimeout(() => {
         if (callStatus === "connecting") {
-          console.log("Call timed out");
-          call.close();
-          setCallStatus("idle");
-          setIsLoading(false);
+          console.log("Call timed out")
+          call.close()
+          setCallStatus("idle")
+          setIsLoading(false)
           toast({
             title: "Call Timeout",
             description: "The call took too long to connect. Please try again.",
-            variant: "destructive",
-          });
+          })
         }
-      }, 30000); // 30 second timeout
+      }, 30000) // 30 second timeout
 
       // Clear the timeout if the component unmounts or the call connects
-      return () => clearTimeout(timeout);
+      return () => clearTimeout(timeout)
     } catch (error: any) {
-      console.error("Error starting call:", error);
-      setCallStatus("idle");
-      setIsLoading(false);
+      console.error("Error starting call:", error)
+      setCallStatus("idle")
+      setIsLoading(false)
       toast({
         title: "Call Error",
-        description:
-          error.message ||
-          "Failed to start call. Please check your camera and microphone.",
-        variant: "destructive",
-      });
+        description: error.message || "Failed to start call. Please check your camera and microphone.",
+      })
     }
-  };
+  }
 
   // End a call
   const endCall = () => {
-    console.log("📞 Ending call...");
-    setCallStatus("ending");
-    setIsLoading(true);
+    console.log("📞 Ending call...")
+    setCallStatus("ending")
+    setIsLoading(true)
 
     // First, stop the background processor rendering loop
     if (backgroundRemovalEnabled) {
-      BackgroundProcessor.stopRendering();
+      BackgroundProcessor.stopRendering()
     }
 
     // Close the active call
     if (activeCall) {
       try {
-        activeCall.close();
+        activeCall.close()
       } catch (e) {
-        console.error("Error closing active call:", e);
+        console.error("Error closing active call:", e)
       }
     }
-    setActiveCall(null);
+    setActiveCall(null)
 
     // Add this to the endCall function, right after the "Close the active call" section
     // Stop screen sharing if active when call ends
     if (isScreenSharing && screenStream) {
-      stopScreenShareHook();
-      setPreviousStream(null);
+      stopScreenShareHook()
+      setPreviousStream(null)
     }
 
     // Get references to all connections
-    const currentPeer = peer;
-    const currentLocalVideo = localVideoRef.current;
-    const currentRemoteVideo = remoteVideoRef.current;
-    const currentCanvas = canvasRef.current;
+    const currentPeer = peer
+    const currentLocalVideo = localVideoRef.current
+    const currentRemoteVideo = remoteVideoRef.current
+    const currentCanvas = canvasRef.current
 
     // Close all media connections specifically
     if (currentPeer) {
@@ -1223,192 +1085,205 @@ export default function Home() {
         // Properly close each media connection
         Object.values(currentPeer.connections).forEach((connections) => {
           connections.forEach((conn: any) => {
-            console.log("Closing connection:", conn);
+            console.log("Closing connection:", conn)
             if (conn.type === "media" && conn.close) {
-              conn.close();
+              conn.close()
             }
             if (conn.peerConnection) {
-              conn.peerConnection.close();
+              conn.peerConnection.close()
             }
-          });
-        });
+          })
+        })
       } catch (e) {
-        console.error("Error closing peer connections:", e);
+        console.error("Error closing peer connections:", e)
       }
     }
 
     // Stop all media tracks from all possible sources
     const stopAllTracksFromStream = (stream: MediaStream | null) => {
-      if (!stream) return;
-      console.log("Stopping tracks for stream:", stream.id);
+      if (!stream) return
+      console.log("Stopping tracks for stream:", stream.id)
       stream.getTracks().forEach((track) => {
-        console.log("Stopping track:", track.id, track.kind);
-        track.stop();
-      });
-    };
+        console.log("Stopping track:", track.id, track.kind)
+        track.stop()
+      })
+    }
 
     // Stop local video stream
     if (currentLocalVideo?.srcObject) {
-      stopAllTracksFromStream(currentLocalVideo.srcObject as MediaStream);
-      currentLocalVideo.srcObject = null;
-      console.log("✅ Local video stream cleared");
+      stopAllTracksFromStream(currentLocalVideo.srcObject as MediaStream)
+      currentLocalVideo.srcObject = null
+      console.log("✅ Local video stream cleared")
     }
 
     // Stop remote video stream
     if (currentRemoteVideo?.srcObject) {
-      stopAllTracksFromStream(currentRemoteVideo.srcObject as MediaStream);
-      currentRemoteVideo.srcObject = null;
-      console.log("✅ Remote video stream cleared");
+      stopAllTracksFromStream(currentRemoteVideo.srcObject as MediaStream)
+      currentRemoteVideo.srcObject = null
+      console.log("✅ Remote video stream cleared")
     }
 
     // Stop canvas stream
     if (backgroundRemovalEnabled && currentCanvas) {
       try {
-        const canvasStream = currentCanvas.captureStream();
-        stopAllTracksFromStream(canvasStream);
-        console.log("✅ Canvas stream stopped");
+        const canvasStream = currentCanvas.captureStream()
+        stopAllTracksFromStream(canvasStream)
+        console.log("✅ Canvas stream stopped")
       } catch (e) {
-        console.error("Error stopping canvas stream:", e);
+        console.error("Error stopping canvas stream:", e)
       }
     }
 
     // Reset global state
-    setRemoteStream(null);
+    setRemoteStream(null)
 
     // Clean up WebGL resources if background removal was enabled
     if (backgroundRemovalEnabled) {
-      BackgroundProcessor.cleanup();
-      processedStreamRef.current = null;
+      BackgroundProcessor.cleanup()
+      processedStreamRef.current = null
     }
 
-    setIsAudioMuted(false);
-    setIsVideoEnabled(true);
-    setCallStatus("idle");
-    setIsLoading(false);
+    setIsAudioMuted(false)
+    setIsVideoEnabled(true)
+    setCallStatus("idle")
+    setIsLoading(false)
 
-    console.log("✅ Call ended successfully");
-  };
+    console.log("✅ Call ended successfully")
+  }
 
   // Toggle audio mute state
   const toggleAudio = () => {
     if (localStream) {
-      const audioTracks = localStream.getAudioTracks();
+      const audioTracks = localStream.getAudioTracks()
       audioTracks.forEach((track) => {
-        track.enabled = isAudioMuted;
-      });
+        track.enabled = isAudioMuted
+      })
 
       // Also update audio in the active call if it exists
       if (activeCall && activeCall.peerConnection) {
-        const senders = activeCall.peerConnection.getSenders();
-        const audioSender = senders.find(
-          (sender) => sender.track && sender.track.kind === "audio"
-        );
+        const senders = activeCall.peerConnection.getSenders()
+        const audioSender = senders.find((sender) => sender.track && sender.track.kind === "audio")
 
         if (audioSender && audioSender.track) {
-          audioSender.track.enabled = isAudioMuted;
+          audioSender.track.enabled = isAudioMuted
         }
       }
 
       // Also update audio in the processed stream if it exists
       if (processedStreamRef.current) {
-        const processedAudioTracks =
-          processedStreamRef.current.getAudioTracks();
+        const processedAudioTracks = processedStreamRef.current.getAudioTracks()
         processedAudioTracks.forEach((track) => {
-          track.enabled = isAudioMuted;
-        });
+          track.enabled = isAudioMuted
+        })
       }
 
-      setIsAudioMuted(!isAudioMuted);
-      console.log(`🎤 Audio ${isAudioMuted ? "unmuted" : "muted"}`);
+      setIsAudioMuted(!isAudioMuted)
+      console.log(`🎤 Audio ${isAudioMuted ? "unmuted" : "muted"}`)
     }
-  };
+  }
 
   // Toggle video enabled state
   const toggleVideo = () => {
     if (localStream) {
-      const videoTracks = localStream.getVideoTracks();
+      const videoTracks = localStream.getVideoTracks()
       videoTracks.forEach((track) => {
-        track.enabled = !isVideoEnabled;
-      });
+        track.enabled = !isVideoEnabled
+      })
 
       // Also update video in the processed stream if it exists
       if (processedStreamRef.current) {
-        const processedVideoTracks =
-          processedStreamRef.current.getVideoTracks();
+        const processedVideoTracks = processedStreamRef.current.getVideoTracks()
         processedVideoTracks.forEach((track) => {
-          track.enabled = !isVideoEnabled;
-        });
+          track.enabled = !isVideoEnabled
+        })
       }
 
-      setIsVideoEnabled(!isVideoEnabled);
-      console.log(`📹 Video ${isVideoEnabled ? "disabled" : "enabled"}`);
+      setIsVideoEnabled(!isVideoEnabled)
+      console.log(`📹 Video ${isVideoEnabled ? "disabled" : "enabled"}`)
     }
-  };
+  }
 
-  // Update the handleSwitchCamera function to update the mirror state
+  // 5. Update the handleSwitchCamera function to ensure mirroring is applied correctly
   const handleSwitchCamera = async () => {
-    if (!hasMultipleCameras) return;
+    if (!hasMultipleCameras) return
 
-    setIsLoading(true);
+    setIsLoading(true)
     try {
       // Use the hook's switchCamera function which handles all the device switching logic
-      const newStream = await switchCamera(true);
+      const newStream = await switchCamera(true)
 
       if (newStream) {
-        // The hook will update its internal stream state, which will trigger our useEffect
-        // that updates localStream, so we don't need to set it here
-
         // Update the mirror state based on the new camera
-        updateMirrorState();
+        // This needs to happen after the camera switch is complete
+        setTimeout(() => {
+          updateMirrorState()
+
+          // Process the new stream with the updated mirror state
+          ;(async () => {
+            if (!backgroundRemovalEnabled) {
+              const processedStream = await processCameraStream(newStream)
+
+              // Update local video display with the processed stream
+              if (localVideoRef.current) {
+                localVideoRef.current.srcObject = processedStream
+              }
+
+              // If we're in a call, update the remote stream
+              if (activeCall) {
+                await updateRemoteStream(processedStream)
+              }
+            }
+          })()
+        }, 200) // Slightly longer delay to ensure camera info is updated
 
         toast({
           title: "Camera Switched",
           description: `Switched to ${currentCameraName}`,
-        });
+        })
 
         // If background removal is enabled, we need to reprocess the stream
         if (backgroundRemovalEnabled) {
           // Turn off background removal first
-          await handleBackgroundRemovalToggle(false);
+          await handleBackgroundRemovalToggle(false)
 
           // Then turn it back on with the new stream
           setTimeout(() => {
-            handleBackgroundRemovalToggle(true);
-            setIsLoading(false);
-          }, 500);
+            handleBackgroundRemovalToggle(true)
+            setIsLoading(false)
+          }, 500)
+        } else {
+          setIsLoading(false)
         }
       } else {
-        throw new Error("Failed to switch camera");
+        throw new Error("Failed to switch camera")
       }
     } catch (err) {
-      console.error("Error switching camera:", err);
+      console.error("Error switching camera:", err)
       toast({
         title: "Camera Switch Failed",
         description: "Failed to switch camera. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+      })
+      setIsLoading(false)
     }
-  };
+  }
 
   // Add this new useEffect after the other useEffects to handle page visibility
   useEffect(() => {
     // Function to handle visibility change
     const handleVisibilityChange = () => {
-      const isVisible = document.visibilityState === "visible";
-      setIsPageVisible(isVisible);
+      const isVisible = document.visibilityState === "visible"
+      setIsPageVisible(isVisible)
 
       // If we're screen sharing and the page becomes hidden
       if (!isVisible && isScreenSharing) {
-        console.log("Page hidden while screen sharing - activating keep-alive");
+        console.log("Page hidden while screen sharing - activating keep-alive")
 
         // Add class to body to indicate hidden screen sharing
-        document.body.classList.add("hidden-screen-sharing");
+        document.body.classList.add("hidden-screen-sharing")
 
         // Set up a keep-alive interval to prevent the stream from freezing
         if (keepAliveIntervalRef.current) {
-          clearInterval(keepAliveIntervalRef.current);
+          clearInterval(keepAliveIntervalRef.current)
         }
 
         keepAliveIntervalRef.current = setInterval(() => {
@@ -1416,52 +1291,44 @@ export default function Home() {
           if (activeCall && activeCall.peerConnection) {
             try {
               // Try to access data channels in a more compatible way
-              let dataChannel = null;
+              let dataChannel = null
               if (activeCall.peerConnection) {
                 // Cast to our extended interface
-                const peerConn =
-                  activeCall.peerConnection as ExtendedRTCPeerConnection;
+                const peerConn = activeCall.peerConnection as ExtendedRTCPeerConnection
 
                 // Try different methods to access data channels
                 if (typeof peerConn.getDataChannels === "function") {
-                  const channels = peerConn.getDataChannels();
+                  const channels = peerConn.getDataChannels()
                   if (channels && channels.length > 0) {
-                    dataChannel = channels[0];
+                    dataChannel = channels[0]
                   }
                 } else if (peerConn.dataChannel) {
-                  dataChannel = peerConn.dataChannel;
+                  dataChannel = peerConn.dataChannel
                 } else if (peerConn.dataChannels) {
-                  const channels = peerConn.dataChannels;
+                  const channels = peerConn.dataChannels
                   if (channels && channels.length > 0) {
-                    dataChannel = channels[0];
+                    dataChannel = channels[0]
                   }
                 }
 
                 // Send keepalive if we have a data channel
                 if (dataChannel && dataChannel.readyState === "open") {
-                  dataChannel.send(
-                    JSON.stringify({ type: "keepalive", timestamp: Date.now() })
-                  );
+                  dataChannel.send(JSON.stringify({ type: "keepalive", timestamp: Date.now() }))
                 }
               }
 
               // Log connection status periodically
-              console.log(
-                "Keep-alive: Screen sharing active while page hidden"
-              );
+              console.log("Keep-alive: Screen sharing active while page hidden")
             } catch (e) {
-              console.error("Error in keep-alive:", e);
+              console.error("Error in keep-alive:", e)
             }
           }
-        }, 1000); // Send a keep-alive signal every second
+        }, 1000) // Send a keep-alive signal every second
 
         // Request the browser to prioritize this page even when hidden
-        const extendedNav = navigator as ExtendedNavigator;
-        if (
-          extendedNav.scheduling &&
-          typeof extendedNav.scheduling.isInputPending === "function"
-        ) {
-          document.body.classList.add("screen-sharing-active");
+        const extendedNav = navigator as ExtendedNavigator
+        if (extendedNav.scheduling && typeof extendedNav.scheduling.isInputPending === "function") {
+          document.body.classList.add("screen-sharing-active")
         }
 
         // Optimize performance during screen sharing
@@ -1471,51 +1338,51 @@ export default function Home() {
             // Lower the priority of non-essential tasks
             const lowPriorityTasks = () => {
               // Any non-essential animations or calculations can go here
-              console.log("Running low priority tasks during screen sharing");
-            };
+              console.log("Running low priority tasks during screen sharing")
+            }
 
             // Schedule low priority tasks for idle time
-            window.requestIdleCallback(lowPriorityTasks, { timeout: 1000 });
+            window.requestIdleCallback(lowPriorityTasks, { timeout: 1000 })
           }
 
           // Add a class to the body to optimize rendering
-          document.body.classList.add("screen-sharing-active");
+          document.body.classList.add("screen-sharing-active")
         }
       } else if (isVisible) {
         // Remove the hidden screen sharing class
-        document.body.classList.remove("hidden-screen-sharing");
+        document.body.classList.remove("hidden-screen-sharing")
 
         // Clear the keep-alive interval when the page becomes visible again
-        console.log("Page visible again - deactivating keep-alive");
+        console.log("Page visible again - deactivating keep-alive")
         if (keepAliveIntervalRef.current) {
-          clearInterval(keepAliveIntervalRef.current);
-          keepAliveIntervalRef.current = null;
+          clearInterval(keepAliveIntervalRef.current)
+          keepAliveIntervalRef.current = null
         }
-        document.body.classList.remove("screen-sharing-active");
+        document.body.classList.remove("screen-sharing-active")
       }
-    };
+    }
 
     // Set up event listeners for page visibility changes
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange)
 
     // Clean up
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
       if (keepAliveIntervalRef.current) {
-        clearInterval(keepAliveIntervalRef.current);
-        keepAliveIntervalRef.current = null;
+        clearInterval(keepAliveIntervalRef.current)
+        keepAliveIntervalRef.current = null
       }
 
-      document.body.classList.remove("screen-sharing-active");
-      document.body.classList.remove("hidden-screen-sharing");
+      document.body.classList.remove("screen-sharing-active")
+      document.body.classList.remove("hidden-screen-sharing")
 
       // Add the missing cleanup code here
       if (document.body.dataset.originalTitle) {
-        document.title = document.body.dataset.originalTitle;
-        delete document.body.dataset.originalTitle;
+        document.title = document.body.dataset.originalTitle
+        delete document.body.dataset.originalTitle
       }
-    };
-  }, [isScreenSharing, activeCall]);
+    }
+  }, [isScreenSharing, activeCall])
 
   // Add a useEffect to handle screen share errors
   // Add this after your other useEffects:
@@ -1525,26 +1392,24 @@ export default function Home() {
         title: "Screen Sharing Error",
         description: screenShareError,
         variant: "destructive",
-      });
+      })
     }
-  }, [screenShareError, toast]);
+  }, [screenShareError, toast])
 
   // Show loading state while camera is initializing
   if (!isInitialized) {
     return (
       <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-lg text-center">
-        <div className="mx-auto w-10 h-10 sm:w-12 sm:h-12 mb-3 sm:mb-4 relative">
-          <div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <div className="absolute inset-0 border-2 border-blue-200 rounded-full"></div>
-          <div className="absolute w-2.5 h-2.5 sm:w-3 sm:h-3 bg-blue-500 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-lg text-center">
+          <div className="mx-auto w-10 h-10 sm:w-12 sm:h-12 mb-3 sm:mb-4 relative">
+            <div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="absolute inset-0 border-2 border-blue-200 rounded-full"></div>
+            <div className="absolute w-2.5 h-2.5 sm:w-3 sm:h-3 bg-blue-500 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+          </div>
+          <p className="text-gray-700 text-sm sm:text-base font-medium">Initializing camera and microphone...</p>
         </div>
-        <p className="text-gray-700 text-sm sm:text-base font-medium">
-          Initializing camera and microphone...
-        </p>
       </div>
-    </div>
-    );
+    )
   }
 
   return (
@@ -1555,33 +1420,20 @@ export default function Home() {
         <div className="relative w-full max-w-5xl flex justify-center aspect-[9/16] xl:aspect-video rounded-2xl backdrop-blur-sm border border-white/20 shadow-xl overflow-hidden">
           {/* Remote Video */}
           {remoteStream ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-            />
+            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
           ) : (
             <div className="flex flex-col items-center justify-center w-full h-full bg-white/10">
               <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mb-4 rounded-full bg-white">
                 <VideoIcon className="w-8 h-8 text-black" />
               </div>
-              <p className="text-white text-sm sm:text-base font-medium">
-                Waiting for participant to join...
-              </p>
+              <p className="text-white text-sm sm:text-base font-medium">Waiting for participant to join...</p>
             </div>
           )}
 
           {/* Local Video (PiP) */}
           {!isScreenSharing && (
             <div className="absolute top-2 sm:top-4 left-2 sm:left-4 w-28 sm:w-32 md:w-36 lg:w-40 xl:w-48 aspect-video rounded-lg overflow-hidden shadow-md">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
+              <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
               <div className="absolute inset-0 pointer-events-none">
                 <span className="absolute bg-black/40 text-white px-1.5 py-0.5 rounded text-xs bottom-1 left-1">
                   You
@@ -1666,12 +1518,12 @@ export default function Home() {
               {callStatus === "connecting"
                 ? "Establishing connection..."
                 : callStatus === "ending"
-                ? "Ending call..."
-                : "Processing..."}
+                  ? "Ending call..."
+                  : "Processing..."}
             </p>
           </div>
         </div>
       )}
     </>
-  );
+  )
 }
