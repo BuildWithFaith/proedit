@@ -7,7 +7,7 @@ import ControlBar from "@/components/control-bar"
 import BackgroundProcessor from "@/components/background-processor"
 import { useCameraSwitch } from "@/hooks/use-camera-switch"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Monitor, VideoIcon } from "lucide-react"
+import { Loader2, Monitor, VideoIcon } from 'lucide-react'
 // Import the useScreenShare hook at the top with other imports
 import { useScreenShare } from "@/hooks/use-screen-share"
 
@@ -60,10 +60,9 @@ export default function Home() {
   const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null)
   // Add this state variable after the other state declarations (around line 30)
   const [shouldMirror, setShouldMirror] = useState(false)
-
-  // Add this ref at the top of the component with the other refs
-
-  // Add this ref at the top of the component with the other refs
+  // Add these state variables after the other state declarations (around line 30)
+  const [aspectRatio, setAspectRatio] = useState<number>(16 / 9) // Default to 16:9
+  const [isPortrait, setIsPortrait] = useState<boolean>(false)
 
   // Use the camera switch hook
   const {
@@ -756,6 +755,49 @@ export default function Home() {
       window.removeEventListener("orientationchange", handleOrientationChange)
     }
   }, [backgroundRemovalEnabled, localStream, handleBackgroundRemovalToggle])
+
+  // Add these useEffects after the other useEffects to handle video track aspect ratio
+  useEffect(() => {
+    if (localStream) {
+      // Get video track settings to determine actual aspect ratio
+      const videoTrack = localStream.getVideoTracks()[0]
+      if (videoTrack) {
+        const settings = videoTrack.getSettings()
+        if (settings.width && settings.height) {
+          const trackAspectRatio = settings.width / settings.height
+          setAspectRatio(trackAspectRatio)
+          setIsPortrait(settings.height > settings.width)
+        }
+      }
+    }
+  }, [localStream])
+
+  // Add this useEffect to handle orientation changes
+  useEffect(() => {
+    const handleResize = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth)
+    }
+
+    window.addEventListener("resize", handleResize)
+    handleResize() // Initial check
+
+    return () => {
+      window.removeEventListener("resize", handleResize)
+    }
+  }, [])
+
+  // Add this function to determine the best object-fit based on context
+  const getObjectFit = (isLocalVideo: boolean = false) => {
+    // For local video (PiP), we usually want to see ourselves centered
+    if (isLocalVideo) return "cover"
+
+    // For remote video, adapt based on aspect ratio and screen orientation
+    if (isPortrait) {
+      return aspectRatio > 1 ? "contain" : "cover"
+    } else {
+      return aspectRatio < 1 ? "contain" : "cover"
+    }
+  }
 
   // Add this function after the startScreenShare function
 
@@ -1494,7 +1536,24 @@ export default function Home() {
         <div className="relative w-full max-w-5xl flex justify-center aspect-[9/16] xl:aspect-video rounded-2xl backdrop-blur-sm border border-white/20 shadow-xl overflow-hidden">
           {/* Remote Video */}
           {remoteStream ? (
-            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            <video 
+              ref={remoteVideoRef} 
+              autoPlay 
+              playsInline 
+              className="w-full h-full" 
+              style={{ objectFit: getObjectFit() }}
+              onResize={() => {
+                if (remoteStream) {
+                  const videoTrack = remoteStream.getVideoTracks()[0]
+                  if (videoTrack) {
+                    const settings = videoTrack.getSettings()
+                    if (settings.width && settings.height) {
+                      setAspectRatio(settings.width / settings.height)
+                    }
+                  }
+                }
+              }}
+            />
           ) : (
             <div className="flex flex-col items-center justify-center w-full h-full bg-white/10">
               <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mb-4 rounded-full bg-white">
@@ -1512,7 +1571,19 @@ export default function Home() {
                 autoPlay
                 playsInline
                 muted
-                className={`w-full h-full object-cover ${shouldMirror && !backgroundRemovalEnabled ? "scale-x-[-1]" : ""}`}
+                className={`w-full h-full ${shouldMirror && !backgroundRemovalEnabled ? "scale-x-[-1]" : ""}`}
+                style={{ objectFit: getObjectFit(true) }}
+                onResize={() => {
+                  if (localStream) {
+                    const videoTrack = localStream.getVideoTracks()[0]
+                    if (videoTrack) {
+                      const settings = videoTrack.getSettings()
+                      if (settings.width && settings.height) {
+                        setAspectRatio(settings.width / settings.height)
+                      }
+                    }
+                  }
+                }}
               />
               <div className="absolute inset-0 pointer-events-none">
                 <span className="absolute bg-black/40 text-white px-1.5 py-0.5 rounded text-xs bottom-1 left-1">
