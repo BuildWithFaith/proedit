@@ -1,7 +1,9 @@
 "use client"
 
-import { useRef, useState } from "react"
-import { Mic, MicOff, Video, VideoOff, Phone, PhoneOff, Image, Share, SwitchCamera } from "lucide-react"
+import type React from "react"
+import { Button } from "@/components/ui/button"
+import { Mic, MicOff, Video, VideoOff, Phone, PhoneOff, Monitor, StopCircle, Camera, Image } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface ControlBarProps {
   remoteStream: MediaStream | null
@@ -12,20 +14,20 @@ interface ControlBarProps {
   isVideoEnabled: boolean
   toggleVideo: () => void
   backgroundRemovalEnabled: boolean
-  setBackgroundRemovalEnabled: (enabled: boolean | ((prev: boolean) => boolean)) => void
+  setBackgroundRemovalEnabled: (enabled: boolean) => void
   selectedBackground: string
   setSelectedBackground: (background: string) => void
   isLoading: boolean
   callStatus: "idle" | "connecting" | "connected" | "ending"
-  hasMultipleCameras?: boolean
-  switchCamera?: () => void
-  currentCameraName?: string
-  isScreenSharing?: boolean
-  startScreenShare?: () => void
-  stopScreenShare?: () => void
+  hasMultipleCameras: boolean
+  switchCamera: () => void
+  currentCameraName: string
+  isScreenSharing: boolean
+  startScreenShare: () => void
+  stopScreenShare: () => void
 }
 
-export default function ControlBar({
+const ControlBar: React.FC<ControlBarProps> = ({
   remoteStream,
   startCall,
   endCall,
@@ -39,199 +41,145 @@ export default function ControlBar({
   setSelectedBackground,
   isLoading,
   callStatus,
-  hasMultipleCameras = false,
-  switchCamera = () => {},
-  currentCameraName = "Camera",
-  isScreenSharing = false,
-  startScreenShare = () => {},
-  stopScreenShare = () => {},
-}: ControlBarProps) {
-  const [showBackgroundOptions, setShowBackgroundOptions] = useState(false)
-  const backgroundRef = useRef<HTMLDivElement>(null)
-
-  // Background options with labels
-  const backgroundOptions = [
-    { id: "/background/livingroom.jpg", label: "Living Room 1" },
-    { id: "/background/livingroom2.jpg", label: "Living Room 2" },
-    { id: "/background/livingroom3.jpg", label: "Living Room 3" },
-    { id: "/background/office.jpg", label: "office" },
+  hasMultipleCameras,
+  switchCamera,
+  currentCameraName,
+  isScreenSharing,
+  startScreenShare,
+  stopScreenShare,
+}) => {
+  const backgrounds = [
+    { name: "Living Room", path: "/background/livingroom.jpg" },
+    { name: "Living Room 2", path: "/background/livingroom2.jpg" },
+    { name: "Living Room 3", path: "/background/livingroom3.jpg" },
+    { name: "Office", path: "/background/office.jpg" },
   ]
 
   return (
-    <div className="flex items-center justify-center space-x-3 bg-transparent">
-      {/* Audio Button */}
-      <button
+    <div className="flex items-center justify-center gap-1 sm:gap-2 md:gap-3 flex-wrap">
+      {/* Audio toggle button */}
+      <Button
         onClick={toggleAudio}
         disabled={isLoading}
-        className={`p-3 rounded-full ${
-          isAudioMuted ? "bg-gray-200 text-gray-700" : "bg-gray-100 text-gray-700"
-        } hover:bg-gray-200 transition-colors`}
-        aria-label={isAudioMuted ? "Unmute" : "Mute"}
+        size="icon"
+        variant={isAudioMuted ? "destructive" : "secondary"}
+        className="rounded-full w-10 h-10 sm:w-12 sm:h-12"
       >
-        {isAudioMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-      </button>
+        {isAudioMuted ? <MicOff className="h-5 w-5 sm:h-6 sm:w-6" /> : <Mic className="h-5 w-5 sm:h-6 sm:w-6" />}
+      </Button>
 
-      {/* Video Button */}
-      <button
+      {/* Video toggle button */}
+      <Button
         onClick={toggleVideo}
         disabled={isLoading}
-        className={`p-3 rounded-full ${
-          !isVideoEnabled ? "bg-gray-200 text-gray-700" : "bg-gray-100 text-gray-700"
-        } hover:bg-gray-200 transition-colors`}
-        aria-label={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
+        size="icon"
+        variant={!isVideoEnabled ? "destructive" : "secondary"}
+        className="rounded-full w-10 h-10 sm:w-12 sm:h-12"
       >
-        {!isVideoEnabled ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
-      </button>
+        {!isVideoEnabled ? <VideoOff className="h-5 w-5 sm:h-6 sm:w-6" /> : <Video className="h-5 w-5 sm:h-6 sm:w-6" />}
+      </Button>
 
-      {/* Camera Switch Button - Only show if device has multiple cameras */}
-      {hasMultipleCameras && isVideoEnabled && (
-        <button
-          onClick={switchCamera}
-          disabled={isLoading || !isVideoEnabled}
-          className="p-3 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-          aria-label="Switch camera"
-          title={`Switch to next camera (Current: ${currentCameraName})`}
-        >
-          <SwitchCamera className="h-5 w-5" />
-        </button>
-      )}
-
-      {/* Call Button */}
-      {!remoteStream ? (
-        <button
+      {/* Call control button */}
+      {callStatus === "idle" ? (
+        <Button
           onClick={startCall}
-          disabled={isLoading || !isVideoEnabled || callStatus !== "idle"}
-          className={`p-3 rounded-full ${
-            isLoading || !isVideoEnabled || callStatus !== "idle"
-              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-              : "bg-green-500 text-white hover:bg-green-600"
-          } transition-colors`}
-          aria-label="Start call"
+          disabled={isLoading}
+          size="icon"
+          variant="default"
+          className="bg-green-500 hover:bg-green-600 rounded-full w-12 h-12 sm:w-14 sm:h-14"
         >
-          <Phone className="h-5 w-5" />
-        </button>
+          <Phone className="h-6 w-6 sm:h-7 sm:w-7" />
+        </Button>
       ) : (
-        <button
+        <Button
           onClick={endCall}
-          disabled={isLoading || callStatus === "ending"}
-          className={`p-3 rounded-full ${
-            isLoading || callStatus === "ending"
-              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-              : "bg-red-500 text-white hover:bg-red-600"
-          } transition-colors`}
-          aria-label="End call"
+          disabled={isLoading}
+          size="icon"
+          variant="destructive"
+          className="rounded-full w-12 h-12 sm:w-14 sm:h-14"
         >
-          <PhoneOff className="h-5 w-5" />
-        </button>
+          <PhoneOff className="h-6 w-6 sm:h-7 sm:w-7" />
+        </Button>
       )}
 
-      {/* Background Button */}
-      <div className="relative" ref={backgroundRef}>
-        <button
-          onClick={() => setShowBackgroundOptions(!showBackgroundOptions)}
-          disabled={isLoading}
-          className="p-3 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-          aria-label="Background options"
-        >
-          <Image className="h-5 w-5" />
-        </button>
-
-        {/* Background Options Dropdown */}
-        {showBackgroundOptions && (
-          <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-3 w-64 z-10">
-            <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700">Background Settings</h3>
-              <button onClick={() => setShowBackgroundOptions(false)} className="text-gray-400 hover:text-gray-600">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Background removal toggle */}
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-gray-700">Background Removal</span>
-              <button
-                onClick={() => {
-                  // Only toggle if not already in a loading state
-                  if (!isLoading) {
-                    setBackgroundRemovalEnabled((prev) => !prev)
-                  }
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  backgroundRemovalEnabled ? "bg-blue-600" : "bg-gray-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    backgroundRemovalEnabled ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-
-            {backgroundRemovalEnabled && (
-              <>
-                <p className="text-xs text-gray-500 mb-2">Select Background:</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {backgroundOptions.map((bg) => (
-                    <button
-                      key={bg.id}
-                      onClick={() => setSelectedBackground(bg.id)}
-                      className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all ${
-                        selectedBackground === bg.id
-                          ? "bg-blue-50 border border-blue-200"
-                          : "bg-gray-50 border border-gray-200 hover:bg-gray-100"
-                      }`}
-                    >
-                      <div className="w-full h-12 bg-gray-200 rounded mb-1 overflow-hidden">
-                        <img
-                          src={bg.id || "/placeholder.svg"}
-                          alt={bg.label}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = "/placeholder.svg?height=48&width=64"
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs">{bg.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Share Screen Button */}
+      {/* Screen sharing buttons */}
       {callStatus === "connected" && (
-        <button
-          onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-          disabled={isLoading}
-          className={`p-3 rounded-full ${
-            isLoading
-              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-              : isScreenSharing
-                ? "bg-blue-500 text-white hover:bg-blue-600 ring-2 ring-blue-300 ring-offset-2" // Added ring for emphasis
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          } transition-colors relative`} // Added relative for the badge
-          aria-label={isScreenSharing ? "Stop sharing" : "Share screen"}
-          title={isScreenSharing ? "Stop sharing screen" : "Share your screen"}
-        >
-          <Share className="h-5 w-5" />
-          {isScreenSharing && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
+        <>
+          {!isScreenSharing ? (
+            <Button
+              onClick={startScreenShare}
+              disabled={isLoading}
+              size="icon"
+              variant="secondary"
+              className="rounded-full w-10 h-10 sm:w-12 sm:h-12"
+            >
+              <Monitor className="h-5 w-5 sm:h-6 sm:w-6" />
+            </Button>
+          ) : (
+            <Button
+              onClick={stopScreenShare}
+              disabled={isLoading}
+              size="icon"
+              variant="destructive"
+              className="rounded-full w-10 h-10 sm:w-12 sm:h-12"
+            >
+              <StopCircle className="h-5 w-5 sm:h-6 sm:w-6" />
+            </Button>
           )}
-        </button>
+        </>
       )}
+
+      {/* Camera switch button */}
+      {hasMultipleCameras && (
+        <Button
+          onClick={switchCamera}
+          disabled={isLoading}
+          size="icon"
+          variant="secondary"
+          className="rounded-full w-10 h-10 sm:w-12 sm:h-12"
+        >
+          <Camera className="h-5 w-5 sm:h-6 sm:w-6" />
+        </Button>
+      )}
+
+      {/* Background removal dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            disabled={isLoading}
+            size="icon"
+            variant={backgroundRemovalEnabled ? "default" : "secondary"}
+            className={`rounded-full w-10 h-10 sm:w-12 sm:h-12 ${
+              backgroundRemovalEnabled ? "bg-blue-500 hover:bg-blue-600" : ""
+            }`}
+          >
+            <Image className="h-5 w-5 sm:h-6 sm:w-6" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem onClick={() => setBackgroundRemovalEnabled(!backgroundRemovalEnabled)}>
+            {backgroundRemovalEnabled ? "Disable" : "Enable"} Background Removal
+          </DropdownMenuItem>
+          {backgroundRemovalEnabled && (
+            <>
+              <DropdownMenuItem disabled className="opacity-50 cursor-default">
+                Select Background:
+              </DropdownMenuItem>
+              {backgrounds.map((bg) => (
+                <DropdownMenuItem
+                  key={bg.path}
+                  onClick={() => setSelectedBackground(bg.path)}
+                  className={selectedBackground === bg.path ? "bg-blue-100 dark:bg-blue-900" : ""}
+                >
+                  {bg.name}
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
 
+export default ControlBar

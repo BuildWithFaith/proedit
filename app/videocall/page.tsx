@@ -7,7 +7,7 @@ import ControlBar from "@/components/control-bar"
 import BackgroundProcessor from "@/components/background-processor"
 import { useCameraSwitch } from "@/hooks/use-camera-switch"
 import { useToast } from "@/hooks/use-toast"
-import { VideoIcon } from "lucide-react"
+import { Loader2, Monitor, VideoIcon } from "lucide-react"
 // Import the useScreenShare hook at the top with other imports
 import { useScreenShare } from "@/hooks/use-screen-share"
 
@@ -300,7 +300,7 @@ export default function Home() {
     [shouldMirror, mirrorVideoStream],
   )
 
-  // 4. Update the useEffect that handles camera stream changes to use the processed stream for local display
+  // 4. Update the useEffect that handles camera stream changes to use CSS mirroring for local display
   useEffect(() => {
     if (cameraStream) {
       // Apply current audio mute state
@@ -325,15 +325,16 @@ export default function Home() {
       // Process the stream for both local display and remote sending
       ;(async () => {
         if (!backgroundRemovalEnabled) {
+          // For remote stream: Process with canvas-based mirroring
           const processedStream = await processCameraStream(cameraStream)
 
-          // Update local video display with the processed stream
+          // For local display: Use the original stream with CSS mirroring
           if (localVideoRef.current) {
-            localVideoRef.current.srcObject = processedStream
-            // Remove any CSS transform - we're using the processed stream directly
+            localVideoRef.current.srcObject = cameraStream
+            // CSS mirroring is applied via className
           }
 
-          // If we're in a call, update the remote stream
+          // If we're in a call, update the remote stream with the processed stream
           if (activeCall) {
             await updateRemoteStream(processedStream)
           }
@@ -542,16 +543,17 @@ export default function Home() {
             // Set the local stream to the fresh stream
             setLocalStream(freshStream)
 
-            // Process the fresh stream for display
-            const processedStream = await processCameraStream(freshStream)
-
-            // Set the video source to the processed stream immediately to avoid black screen
+            // For local display: Use the original stream with CSS mirroring
             if (localVideoRef.current) {
-              localVideoRef.current.srcObject = processedStream
-              console.log("Set video source to processed stream")
+              localVideoRef.current.srcObject = freshStream
+              console.log("Set video source to fresh stream")
+              // CSS mirroring is applied via className
             }
 
-            // If in a call, update the remote stream
+            // For remote stream: Process with canvas-based mirroring
+            const processedStream = await processCameraStream(freshStream)
+
+            // If in a call, update the remote stream with the processed stream
             if (activeCall) {
               await updateRemoteStream(processedStream)
               needsRemoteUpdateRef.current = false
@@ -777,11 +779,38 @@ export default function Home() {
       setPreviousStream(localStream)
 
       // Start screen sharing using the hook
-      const stream = await startScreenShareHook()
+      const stream = await startScreenShareHook().catch((error) => {
+        console.error("Error in startScreenShareHook:", error)
+        // Check for common errors
+        if (error.name === "NotAllowedError" || error.message?.includes("Permission")) {
+          toast({
+            title: "Permission Denied",
+            description: "You denied permission to share your screen",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Screen Sharing Failed",
+            description: error.message || "Failed to start screen sharing",
+            variant: "destructive",
+          })
+        }
+        return null
+      })
 
       if (!stream) {
         throw new Error("Failed to get screen sharing stream")
       }
+
+      // Add direct event listeners to the tracks for immediate response
+      stream.getVideoTracks().forEach((track) => {
+        track.onended = async () => {
+          console.log("Screen share track ended directly")
+          if (isScreenSharing) {
+            await stopScreenShare()
+          }
+        }
+      })
 
       // Update the local video display
       if (localVideoRef.current) {
@@ -834,31 +863,33 @@ export default function Home() {
       if (previousStream) {
         setLocalStream(previousStream)
 
-        // Process the stream for display
+        // Process the stream for remote sending
         const processedStream = await processCameraStream(previousStream)
 
-        // Update the local video display
+        // Update the local video display with the original stream
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = processedStream
+          localVideoRef.current.srcObject = previousStream
           localVideoRef.current.style.display = "block"
+          // CSS mirroring is applied via className
         }
 
-        // Update the remote stream
+        // Update the remote stream with the processed stream
         await updateRemoteStream(processedStream)
       } else if (cameraStream) {
         // Fallback to camera stream if previous stream is not available
         setLocalStream(cameraStream)
 
-        // Process the stream for display
+        // Process the stream for remote sending
         const processedStream = await processCameraStream(cameraStream)
 
-        // Update the local video display
+        // Update the local video display with the original stream
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = processedStream
+          localVideoRef.current.srcObject = cameraStream
           localVideoRef.current.style.display = "block"
+          // CSS mirroring is applied via className
         }
 
-        // Update the remote stream
+        // Update the remote stream with the processed stream
         await updateRemoteStream(processedStream)
       }
 
@@ -945,11 +976,13 @@ export default function Home() {
       if (backgroundRemovalEnabled && processedStreamRef.current) {
         finalStream = processedStreamRef.current
       } else {
+        // For remote stream: Process with canvas-based mirroring
         finalStream = await processCameraStream(streamToUse)
 
-        // Update local video display with the processed stream
+        // For local display: Use the original stream with CSS mirroring
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = finalStream
+          localVideoRef.current.srcObject = streamToUse
+          // CSS mirroring is applied via className
         }
       }
 
@@ -1221,11 +1254,13 @@ export default function Home() {
           // Process the new stream with the updated mirror state
           ;(async () => {
             if (!backgroundRemovalEnabled) {
+              // For remote stream: Process with canvas-based mirroring
               const processedStream = await processCameraStream(newStream)
 
-              // Update local video display with the processed stream
+              // For local display: Use the original stream with CSS mirroring
               if (localVideoRef.current) {
-                localVideoRef.current.srcObject = processedStream
+                localVideoRef.current.srcObject = newStream
+                // CSS mirroring is applied via className
               }
 
               // If we're in a call, update the remote stream
@@ -1396,17 +1431,56 @@ export default function Home() {
     }
   }, [screenShareError, toast])
 
+  // Find the useScreenShare hook usage and add a useEffect to handle track ended events
+  // Add this after the existing useEffect for screen share errors
+
+  // Add this useEffect to handle screen sharing track ended events (when user clicks Chrome's native "Stop sharing" button)
+  useEffect(() => {
+    // Only set up listeners if we're actively screen sharing
+    if (isScreenSharing && screenStream) {
+      console.log("Setting up screen share track ended listeners")
+
+      // Add ended event listeners to all video tracks
+      const videoTracks = screenStream.getVideoTracks()
+
+      const handleTrackEnded = async () => {
+        console.log("Screen sharing track ended via browser controls")
+
+        // Only handle if we're still in screen sharing state
+        if (isScreenSharing) {
+          toast({
+            title: "Screen Sharing Stopped",
+            description: "Screen sharing was stopped from browser controls",
+          })
+
+          // Call our stopScreenShare function to properly clean up
+          await stopScreenShare()
+        }
+      }
+
+      // Add listeners to all video tracks
+      videoTracks.forEach((track) => {
+        track.addEventListener("ended", handleTrackEnded)
+      })
+
+      // Clean up listeners when component unmounts or screen sharing state changes
+      return () => {
+        videoTracks.forEach((track) => {
+          track.removeEventListener("ended", handleTrackEnded)
+        })
+      }
+    }
+  }, [isScreenSharing, screenStream, toast, useCallback(stopScreenShare, [])])
+
   // Show loading state while camera is initializing
   if (!isInitialized) {
     return (
-      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-lg text-center">
-          <div className="mx-auto w-10 h-10 sm:w-12 sm:h-12 mb-3 sm:mb-4 relative">
-            <div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <div className="absolute inset-0 border-2 border-blue-200 rounded-full"></div>
-            <div className="absolute w-2.5 h-2.5 sm:w-3 sm:h-3 bg-blue-500 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+          <div className="mx-auto flex justify-center mb-4">
+            <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
           </div>
-          <p className="text-gray-700 text-sm sm:text-base font-medium">Initializing camera and microphone...</p>
+          <p className="text-gray-700 font-medium">Initializing camera and mic...</p>
         </div>
       </div>
     )
@@ -1415,7 +1489,7 @@ export default function Home() {
   return (
     <>
       <PageSeo />
-      {/* Video Container - Direct layout without main/container wrappers */}
+
       <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4">
         <div className="relative w-full max-w-5xl flex justify-center aspect-[9/16] xl:aspect-video rounded-2xl backdrop-blur-sm border border-white/20 shadow-xl overflow-hidden">
           {/* Remote Video */}
@@ -1433,7 +1507,13 @@ export default function Home() {
           {/* Local Video (PiP) */}
           {!isScreenSharing && (
             <div className="absolute top-2 sm:top-4 left-2 sm:left-4 w-28 sm:w-32 md:w-36 lg:w-40 xl:w-48 aspect-video rounded-lg overflow-hidden shadow-md">
-              <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full h-full object-cover ${shouldMirror && !backgroundRemovalEnabled ? "scale-x-[-1]" : ""}`}
+              />
               <div className="absolute inset-0 pointer-events-none">
                 <span className="absolute bg-black/40 text-white px-1.5 py-0.5 rounded text-xs bottom-1 left-1">
                   You
@@ -1449,23 +1529,8 @@ export default function Home() {
 
           {/* Screen sharing indicator */}
           {isScreenSharing && (
-            <div className="absolute top-2 sm:top-4 left-2 sm:left-4 bg-red-500/80 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium flex items-center space-x-1 sm:space-x-2 animate-pulse">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mr-1"
-              >
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
-              </svg>
+            <div className="absolute top-2 sm:top-4 left-2 sm:left-4 bg-red-500/80 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium flex items-center animate-pulse">
+              <Monitor size={16} className="mr-1 sm:mr-2" />
               <span>Screen Sharing</span>
             </div>
           )}
@@ -1507,14 +1572,12 @@ export default function Home() {
 
       {/* Loading Overlay */}
       {isLoading && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-lg text-center">
-            <div className="mx-auto w-10 h-10 sm:w-12 sm:h-12 mb-3 sm:mb-4 relative">
-              <div className="absolute inset-0 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <div className="absolute inset-0 border-2 border-blue-200 rounded-full"></div>
-              <div className="absolute w-2.5 h-2.5 sm:w-3 sm:h-3 bg-blue-500 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+            <div className="mx-auto flex justify-center mb-4">
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
             </div>
-            <p className="text-gray-700 text-sm sm:text-base font-medium">
+            <p className="text-gray-700 font-medium">
               {callStatus === "connecting"
                 ? "Establishing connection..."
                 : callStatus === "ending"
