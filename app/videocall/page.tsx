@@ -24,6 +24,15 @@ interface ExtendedNavigator extends Navigator {
   }
 }
 
+// Define this outside the component
+function debounce(fn: Function, delay: number) {
+  let timeoutId: NodeJS.Timeout | null = null;
+  return function(...args: any[]) {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
+
 export default function Home() {
   const { peer, connectedPeerId, setConnectedPeerId } = usePeer()
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
@@ -60,9 +69,27 @@ export default function Home() {
   const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null)
   // Add this state variable after the other state declarations (around line 30)
   const [shouldMirror, setShouldMirror] = useState(false)
-  // Add these state variables after the other state declarations (around line 30)
-  const [aspectRatio, setAspectRatio] = useState<number>(16 / 9) // Default to 16:9
-  const [isPortrait, setIsPortrait] = useState<boolean>(false)
+  // Replace the existing aspect ratio state variables with these optimized versions
+  const [videoMetrics, setVideoMetrics] = useState<{
+    localAspectRatio: number;
+    remoteAspectRatio: number;
+    isLocalPortrait: boolean;
+    isRemotePortrait: boolean;
+  }>({
+    localAspectRatio: 16 / 9, // Default to 16:9
+    remoteAspectRatio: 16 / 9,
+    isLocalPortrait: false,
+    isRemotePortrait: false
+  })
+  const [windowDimensions, setWindowDimensions] = useState<{
+    width: number;
+    height: number;
+    isPortrait: boolean;
+  }>({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+    height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+    isPortrait: typeof window !== 'undefined' ? window.innerHeight > window.innerWidth : false
+  })
 
   // Use the camera switch hook
   const {
@@ -131,12 +158,6 @@ export default function Home() {
       setShouldMirror(shouldMirrorValue)
     }
   }, [currentDeviceIndex, hasMultipleCameras, devices, shouldMirror])
-
-  // Update the useEffect that initializes mirroring state to run on component mount
-  useEffect(() => {
-    // Set initial mirror state when component mounts or camera changes
-    updateMirrorState()
-  }, [updateMirrorState])
 
   // 2. Improve the mirrorVideoStream function to be more reliable
   const mirrorVideoStream = useCallback(
@@ -299,117 +320,6 @@ export default function Home() {
     [shouldMirror, mirrorVideoStream],
   )
 
-  // 4. Update the useEffect that handles camera stream changes to use CSS mirroring for local display
-  useEffect(() => {
-    if (cameraStream) {
-      // Apply current audio mute state
-      const audioTracks = cameraStream.getAudioTracks()
-      if (audioTracks.length > 0) {
-        audioTracks.forEach((track) => {
-          track.enabled = !isAudioMuted
-        })
-      }
-
-      // Apply current video enabled state
-      const videoTracks = cameraStream.getVideoTracks()
-      if (videoTracks.length > 0) {
-        videoTracks.forEach((track) => {
-          track.enabled = isVideoEnabled
-        })
-      }
-
-      // Set the local stream
-      setLocalStream(cameraStream)
-
-      // Process the stream for both local display and remote sending
-      ;(async () => {
-        if (!backgroundRemovalEnabled) {
-          // For remote stream: Process with canvas-based mirroring
-          const processedStream = await processCameraStream(cameraStream)
-
-          // For local display: Use the original stream with CSS mirroring
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = cameraStream
-            // CSS mirroring is applied via className
-          }
-
-          // If we're in a call, update the remote stream with the processed stream
-          if (activeCall) {
-            await updateRemoteStream(processedStream)
-          }
-        }
-      })()
-    }
-  }, [
-    cameraStream,
-    isAudioMuted,
-    isVideoEnabled,
-    activeCall,
-    backgroundRemovalEnabled,
-    updateRemoteStream,
-    processCameraStream,
-  ])
-
-  // Show toast if camera error occurs
-  useEffect(() => {
-    if (cameraError) {
-      toast({
-        title: "Camera Error",
-        description: cameraError,
-        variant: "destructive",
-      })
-    }
-  }, [cameraError, toast])
-
-  // Preload background images when the app starts
-  useEffect(() => {
-    preloadImages([
-      "/background/livingroom.jpg",
-      "/background/livingroom2.jpg",
-      "/background/livingroom3.jpg",
-      "/background/office.jpg",
-    ]).then(() => console.log("✅ All backgrounds preloaded!"))
-  }, [preloadImages])
-
-  // Set remote video source when remote stream changes
-  useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream
-    }
-  }, [remoteStream])
-
-  // Handle call timer
-  useEffect(() => {
-    if (callStatus === "connected" && !callStartTime) {
-      const startTime = Date.now() // Fresh timestamp
-      setCallStartTime(startTime)
-
-      timerRef.current = setInterval(() => {
-        setCallDuration(Math.floor((Date.now() - startTime) / 1000)) // Use fresh timestamp
-      }, 1000)
-    } else if (callStatus !== "connected") {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-      }
-      setCallStartTime(null)
-      setCallDuration(0)
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-    }
-  }, [callStatus]) // Remove callStartTime from dependencies
-
-  // Format call duration as MM:SS
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
-  }
-
   // Pre-process the stream with mirroring if needed before passing to background removal
   const prepareStreamForBackgroundRemoval = useCallback(
     async (stream: MediaStream): Promise<MediaStream> => {
@@ -422,6 +332,174 @@ export default function Home() {
     },
     [shouldMirror, mirrorVideoStream],
   )
+
+  // Define stopScreenShare before it's used in any useEffect
+  const stopScreenShare = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      console.log("Stopping screen sharing...")
+
+      // Stop screen sharing using the hook
+      stopScreenShareHook()
+
+      // Restore the previous stream if available
+      if (previousStream) {
+        setLocalStream(previousStream)
+
+        // Process the stream for remote sending
+        const processedStream = await processCameraStream(previousStream)
+
+        // Update the local video display with the original stream
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = previousStream
+          localVideoRef.current.style.display = "block"
+          // CSS mirroring is applied via className
+        }
+
+        // Update the remote stream with the processed stream
+        await updateRemoteStream(processedStream)
+      } else if (cameraStream) {
+        // Fallback to camera stream if previous stream is not available
+        setLocalStream(cameraStream)
+
+        // Process the stream for remote sending
+        const processedStream = await processCameraStream(cameraStream)
+
+        // Update the local video display with the original stream
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = cameraStream
+          localVideoRef.current.style.display = "block"
+          // CSS mirroring is applied via className
+        }
+
+        // Update the remote stream with the processed stream
+        await updateRemoteStream(processedStream)
+      }
+
+      // Reset state
+      setPreviousStream(null)
+
+      // Clear keep-alive interval if it exists
+      if (keepAliveIntervalRef.current) {
+        clearInterval(keepAliveIntervalRef.current)
+        keepAliveIntervalRef.current = null
+      }
+
+      // Remove screen sharing class
+      document.body.classList.remove("screen-sharing-active")
+
+      // Restore original document title
+      if (document.body.dataset.originalTitle) {
+        document.title = document.body.dataset.originalTitle
+        delete document.body.dataset.originalTitle
+      }
+
+      setIsLoading(false)
+
+      toast({
+        title: "Screen Sharing Stopped",
+        description: "Returned to camera view",
+      })
+    } catch (error) {
+      console.error("Error stopping screen share:", error)
+      setIsLoading(false)
+      toast({
+        title: "Error",
+        description: "Failed to stop screen sharing",
+        variant: "destructive",
+      })
+    }
+  }, [cameraStream, previousStream, processCameraStream, stopScreenShareHook, updateRemoteStream, toast])
+
+  // Replace the existing startScreenShare function with this improved version
+  const startScreenShare = useCallback(async () => {
+    if (!activeCall || !activeCall.peerConnection) {
+      toast({
+        title: "No Active Call",
+        description: "You must be in a call to share your screen",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      console.log("Starting screen sharing with worker-based keep-alive...")
+
+      // Save the current stream to restore later
+      setPreviousStream(localStream)
+
+      // Start screen sharing using the hook
+      const stream = await startScreenShareHook().catch((error) => {
+        console.error("Error in startScreenShareHook:", error)
+        // Check for common errors
+        if (error.name === "NotAllowedError" || error.message?.includes("Permission")) {
+          toast({
+            title: "Permission Denied",
+            description: "You denied permission to share your screen",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Screen Sharing Failed",
+            description: error.message || "Failed to start screen sharing",
+            variant: "destructive",
+          })
+        }
+        return null
+      })
+
+      if (!stream) {
+        throw new Error("Failed to get screen sharing stream")
+      }
+
+      // Add direct event listeners to the tracks for immediate response
+      stream.getVideoTracks().forEach((track) => {
+        track.onended = async () => {
+          console.log("Screen share track ended directly")
+          if (isScreenSharing) {
+            await stopScreenShare()
+          }
+        }
+      })
+
+      // Update the local video display
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream
+        localVideoRef.current.style.display = "none"
+      }
+
+      // Update the remote stream
+      await updateRemoteStream(stream)
+
+      // Set document title to indicate screen sharing is active
+      const originalTitle = document.title
+      document.title = "📺 Screen Sharing Active - " + originalTitle
+
+      // Store original title to restore later
+      document.body.dataset.originalTitle = originalTitle
+
+      setIsLoading(false)
+      toast({
+        title: "Screen Sharing Started",
+        description: "Your screen is now being shared",
+      })
+
+      // Add a class to indicate screen sharing is active
+      document.body.classList.add("screen-sharing-active")
+
+      return stream
+    } catch (error) {
+      console.error("Error starting screen share:", error)
+      setIsLoading(false)
+      toast({
+        title: "Screen Sharing Failed",
+        description: "Failed to start screen sharing. Please try again.",
+        variant: "destructive",
+      })
+      return null
+    }
+  }, [activeCall, localStream, startScreenShareHook, stopScreenShare, toast, updateRemoteStream])
 
   // Define handleIncomingCall before it's used
   const handleIncomingCall = useCallback(
@@ -645,333 +723,85 @@ export default function Home() {
     ],
   )
 
-  // Update the useEffect that handles incoming calls to use our memoized handleIncomingCall function
-  useEffect(() => {
-    if (!peer) return
+  // 5. Update the handleSwitchCamera function to ensure mirroring is applied correctly
+  const handleSwitchCamera = useCallback(async () => {
+    if (!hasMultipleCameras) return
 
-    peer.on("call", handleIncomingCall)
+    setIsLoading(true)
+    try {
+      // Use the hook's switchCamera function which handles all the device switching logic
+      const newStream = await switchCamera(true)
 
-    return () => {
-      peer.off("call", handleIncomingCall)
-    }
-  }, [peer, handleIncomingCall]) // Simplified dependency array since handleIncomingCall is now memoized
+      if (newStream) {
+        // Update the mirror state based on the new camera
+        // This needs to happen after the camera switch is complete
+        setTimeout(() => {
+          updateMirrorState()
 
-  // Load background image when selected
-  useEffect(() => {
-    // Preload the selected background
-    const img = new Image()
-    img.crossOrigin = "anonymous"
-    img.src = selectedBackground
-    img.onload = () => {
-      backgroundImageRef.current = img
-      console.log(`✅ Background loaded: ${selectedBackground}`)
+          // Process the new stream with the updated mirror state
+          ;(async () => {
+            if (!backgroundRemovalEnabled) {
+              // For remote stream: Process with canvas-based mirroring
+              const processedStream = await processCameraStream(newStream)
 
-      // If background removal is already enabled, we need to reprocess with the new background
-      if (backgroundRemovalEnabled && localStream) {
-        // Flag that we need to update
-        needsRemoteUpdateRef.current = true
+              // For local display: Use the original stream with CSS mirroring
+              if (localVideoRef.current) {
+                localVideoRef.current.srcObject = newStream
+                // CSS mirroring is applied via className
+              }
 
-        // Process with new background
-        ;(async () => {
-          try {
-            setIsLoading(true)
-
-            // First, apply mirroring if needed before passing to background removal
-            const preparedStream = await prepareStreamForBackgroundRemoval(localStream)
-
-            const processedStream = await BackgroundProcessor.processStreamWithBackgroundRemoval({
-              stream: preparedStream,
-              selectedBackground,
-              isAudioMuted,
-              canvasRef,
-              backgroundImageRef,
-              setLocalStream: (stream) => {
-                processedStreamRef.current = stream
-
-                // Update the video source immediately
-                if (localVideoRef.current) {
-                  localVideoRef.current.srcObject = stream
-                }
-              },
-            })
-
-            // If in a call, update the remote stream
-            if (activeCall) {
-              await updateRemoteStream(processedStream)
-              needsRemoteUpdateRef.current = false
+              // If we're in a call, update the remote stream
+              if (activeCall) {
+                await updateRemoteStream(processedStream)
+              }
             }
-          } catch (error) {
-            console.error("Error updating background:", error)
-            toast({
-              title: "Background Update Error",
-              description: "Failed to update background. Please try again.",
-              variant: "destructive",
-            })
-          } finally {
+          })()
+        }, 200) // Slightly longer delay to ensure camera info is updated
+
+        toast({
+          title: "Camera Switched",
+          description: `Switched to ${currentCameraName}`,
+        })
+
+        // If background removal is enabled, we need to reprocess the stream
+        if (backgroundRemovalEnabled) {
+          // Turn off background removal first
+          await handleBackgroundRemovalToggle(false)
+
+          // Then turn it back on with the new stream
+          setTimeout(() => {
+            handleBackgroundRemovalToggle(true)
             setIsLoading(false)
-          }
-        })()
+          }, 500)
+        } else {
+          setIsLoading(false)
+        }
+      } else {
+        throw new Error("Failed to switch camera")
       }
+    } catch (err) {
+      console.error("Error switching camera:", err)
+      toast({
+        title: "Camera Switch Failed",
+        description: "Failed to switch camera. Please try again.",
+      })
+      setIsLoading(false)
     }
   }, [
-    selectedBackground,
-    backgroundRemovalEnabled,
-    localStream,
-    isAudioMuted,
-    activeCall,
-    toast,
-    updateRemoteStream,
-    prepareStreamForBackgroundRemoval,
+    hasMultipleCameras, 
+    switchCamera, 
+    updateMirrorState, 
+    backgroundRemovalEnabled, 
+    processCameraStream, 
+    activeCall, 
+    updateRemoteStream, 
+    currentCameraName, 
+    toast, 
+    handleBackgroundRemovalToggle
   ])
 
-  // Handle orientation changes for mobile devices
-  useEffect(() => {
-    const handleOrientationChange = () => {
-      // If background removal is active, we need to reprocess with the new orientation
-      if (backgroundRemovalEnabled && localStream) {
-        // Turn off and then back on to reset the canvas dimensions
-        ;(async () => {
-          try {
-            setIsLoading(true)
-            await handleBackgroundRemovalToggle(false)
-
-            // Short delay to ensure clean transition
-            setTimeout(() => {
-              handleBackgroundRemovalToggle(true)
-              setIsLoading(false)
-            }, 500)
-          } catch (error) {
-            console.error("Error handling orientation change:", error)
-            setIsLoading(false)
-          }
-        })()
-      }
-    }
-
-    // Listen for orientation changes
-    window.addEventListener("orientationchange", handleOrientationChange)
-
-    return () => {
-      window.removeEventListener("orientationchange", handleOrientationChange)
-    }
-  }, [backgroundRemovalEnabled, localStream, handleBackgroundRemovalToggle])
-
-  // Add these useEffects after the other useEffects to handle video track aspect ratio
-  useEffect(() => {
-    if (localStream) {
-      // Get video track settings to determine actual aspect ratio
-      const videoTrack = localStream.getVideoTracks()[0]
-      if (videoTrack) {
-        const settings = videoTrack.getSettings()
-        if (settings.width && settings.height) {
-          const trackAspectRatio = settings.width / settings.height
-          setAspectRatio(trackAspectRatio)
-          setIsPortrait(settings.height > settings.width)
-        }
-      }
-    }
-  }, [localStream])
-
-  // Add this useEffect to handle orientation changes
-  useEffect(() => {
-    const handleResize = () => {
-      setIsPortrait(window.innerHeight > window.innerWidth)
-    }
-
-    window.addEventListener("resize", handleResize)
-    handleResize() // Initial check
-
-    return () => {
-      window.removeEventListener("resize", handleResize)
-    }
-  }, [])
-
-  // Add this function to determine the best object-fit based on context
-  const getObjectFit = (isLocalVideo: boolean = false) => {
-    // For local video (PiP), we usually want to see ourselves centered
-    if (isLocalVideo) return "cover"
-
-    // For remote video, adapt based on aspect ratio and screen orientation
-    if (isPortrait) {
-      return aspectRatio > 1 ? "contain" : "cover"
-    } else {
-      return aspectRatio < 1 ? "contain" : "cover"
-    }
-  }
-
-  // Add this function after the startScreenShare function
-
-  // Replace the existing startScreenShare function with this improved version
-  // Replace the entire startScreenShare function with:
-  const startScreenShare = async () => {
-    if (!activeCall || !activeCall.peerConnection) {
-      toast({
-        title: "No Active Call",
-        description: "You must be in a call to share your screen",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      setIsLoading(true)
-      console.log("Starting screen sharing with worker-based keep-alive...")
-
-      // Save the current stream to restore later
-      setPreviousStream(localStream)
-
-      // Start screen sharing using the hook
-      const stream = await startScreenShareHook().catch((error) => {
-        console.error("Error in startScreenShareHook:", error)
-        // Check for common errors
-        if (error.name === "NotAllowedError" || error.message?.includes("Permission")) {
-          toast({
-            title: "Permission Denied",
-            description: "You denied permission to share your screen",
-            variant: "destructive",
-          })
-        } else {
-          toast({
-            title: "Screen Sharing Failed",
-            description: error.message || "Failed to start screen sharing",
-            variant: "destructive",
-          })
-        }
-        return null
-      })
-
-      if (!stream) {
-        throw new Error("Failed to get screen sharing stream")
-      }
-
-      // Add direct event listeners to the tracks for immediate response
-      stream.getVideoTracks().forEach((track) => {
-        track.onended = async () => {
-          console.log("Screen share track ended directly")
-          if (isScreenSharing) {
-            await stopScreenShare()
-          }
-        }
-      })
-
-      // Update the local video display
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream
-        localVideoRef.current.style.display = "none"
-      }
-
-      // Update the remote stream
-      await updateRemoteStream(stream)
-
-      // Set document title to indicate screen sharing is active
-      const originalTitle = document.title
-      document.title = "📺 Screen Sharing Active - " + originalTitle
-
-      // Store original title to restore later
-      document.body.dataset.originalTitle = originalTitle
-
-      setIsLoading(false)
-      toast({
-        title: "Screen Sharing Started",
-        description: "Your screen is now being shared",
-      })
-
-      // Add a class to indicate screen sharing is active
-      document.body.classList.add("screen-sharing-active")
-
-      return stream
-    } catch (error) {
-      console.error("Error starting screen share:", error)
-      setIsLoading(false)
-      toast({
-        title: "Screen Sharing Failed",
-        description: "Failed to start screen sharing. Please try again.",
-        variant: "destructive",
-      })
-      return null
-    }
-  }
-
-  // Update the stopScreenShare function to clean up the canvas-based sharing
-  const stopScreenShare = async () => {
-    try {
-      setIsLoading(true)
-      console.log("Stopping screen sharing...")
-
-      // Stop screen sharing using the hook
-      stopScreenShareHook()
-
-      // Restore the previous stream if available
-      if (previousStream) {
-        setLocalStream(previousStream)
-
-        // Process the stream for remote sending
-        const processedStream = await processCameraStream(previousStream)
-
-        // Update the local video display with the original stream
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = previousStream
-          localVideoRef.current.style.display = "block"
-          // CSS mirroring is applied via className
-        }
-
-        // Update the remote stream with the processed stream
-        await updateRemoteStream(processedStream)
-      } else if (cameraStream) {
-        // Fallback to camera stream if previous stream is not available
-        setLocalStream(cameraStream)
-
-        // Process the stream for remote sending
-        const processedStream = await processCameraStream(cameraStream)
-
-        // Update the local video display with the original stream
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = cameraStream
-          localVideoRef.current.style.display = "block"
-          // CSS mirroring is applied via className
-        }
-
-        // Update the remote stream with the processed stream
-        await updateRemoteStream(processedStream)
-      }
-
-      // Reset state
-      setPreviousStream(null)
-
-      // Clear keep-alive interval if it exists
-      if (keepAliveIntervalRef.current) {
-        clearInterval(keepAliveIntervalRef.current)
-        keepAliveIntervalRef.current = null
-      }
-
-      // Remove screen sharing class
-      document.body.classList.remove("screen-sharing-active")
-
-      // Restore original document title
-      if (document.body.dataset.originalTitle) {
-        document.title = document.body.dataset.originalTitle
-        delete document.body.dataset.originalTitle
-      }
-
-      setIsLoading(false)
-
-      toast({
-        title: "Screen Sharing Stopped",
-        description: "Returned to camera view",
-      })
-    } catch (error) {
-      console.error("Error stopping screen share:", error)
-      setIsLoading(false)
-      toast({
-        title: "Error",
-        description: "Failed to stop screen sharing",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Update the startCall function to use the state
-  const startCall = async () => {
+  // Start/End call functions
+  const startCall = useCallback(async () => {
     if (!peer) {
       toast({
         title: "Connection Error",
@@ -1118,10 +948,22 @@ export default function Home() {
         description: error.message || "Failed to start call. Please check your camera and microphone.",
       })
     }
-  }
+  }, [
+    peer, 
+    connectedPeerId, 
+    localStream, 
+    startStream, 
+    devices, 
+    currentDeviceIndex, 
+    backgroundRemovalEnabled, 
+    processCameraStream, 
+    isAudioMuted, 
+    callStatus, 
+    toast
+  ])
 
   // End a call
-  const endCall = () => {
+  const endCall = useCallback(() => {
     console.log("📞 Ending call...")
     setCallStatus("ending")
     setIsLoading(true)
@@ -1224,10 +1066,20 @@ export default function Home() {
     setIsLoading(false)
 
     console.log("✅ Call ended successfully")
-  }
+  }, [
+    backgroundRemovalEnabled, 
+    activeCall, 
+    isScreenSharing, 
+    screenStream, 
+    stopScreenShareHook, 
+    peer, 
+    localVideoRef, 
+    remoteVideoRef, 
+    canvasRef
+  ])
 
   // Toggle audio mute state
-  const toggleAudio = () => {
+  const toggleAudio = useCallback(() => {
     if (localStream) {
       const audioTracks = localStream.getAudioTracks()
       audioTracks.forEach((track) => {
@@ -1255,10 +1107,10 @@ export default function Home() {
       setIsAudioMuted(!isAudioMuted)
       console.log(`🎤 Audio ${isAudioMuted ? "unmuted" : "muted"}`)
     }
-  }
+  }, [localStream, isAudioMuted, activeCall])
 
   // Toggle video enabled state
-  const toggleVideo = () => {
+  const toggleVideo = useCallback(() => {
     if (localStream) {
       const videoTracks = localStream.getVideoTracks()
       videoTracks.forEach((track) => {
@@ -1276,73 +1128,341 @@ export default function Home() {
       setIsVideoEnabled(!isVideoEnabled)
       console.log(`📹 Video ${isVideoEnabled ? "disabled" : "enabled"}`)
     }
-  }
+  }, [localStream, isVideoEnabled])
 
-  // 5. Update the handleSwitchCamera function to ensure mirroring is applied correctly
-  const handleSwitchCamera = async () => {
-    if (!hasMultipleCameras) return
-
-    setIsLoading(true)
-    try {
-      // Use the hook's switchCamera function which handles all the device switching logic
-      const newStream = await switchCamera(true)
-
-      if (newStream) {
-        // Update the mirror state based on the new camera
-        // This needs to happen after the camera switch is complete
-        setTimeout(() => {
-          updateMirrorState()
-
-          // Process the new stream with the updated mirror state
-          ;(async () => {
-            if (!backgroundRemovalEnabled) {
-              // For remote stream: Process with canvas-based mirroring
-              const processedStream = await processCameraStream(newStream)
-
-              // For local display: Use the original stream with CSS mirroring
-              if (localVideoRef.current) {
-                localVideoRef.current.srcObject = newStream
-                // CSS mirroring is applied via className
-              }
-
-              // If we're in a call, update the remote stream
-              if (activeCall) {
-                await updateRemoteStream(processedStream)
-              }
-            }
-          })()
-        }, 200) // Slightly longer delay to ensure camera info is updated
-
-        toast({
-          title: "Camera Switched",
-          description: `Switched to ${currentCameraName}`,
-        })
-
-        // If background removal is enabled, we need to reprocess the stream
-        if (backgroundRemovalEnabled) {
-          // Turn off background removal first
-          await handleBackgroundRemovalToggle(false)
-
-          // Then turn it back on with the new stream
-          setTimeout(() => {
-            handleBackgroundRemovalToggle(true)
-            setIsLoading(false)
-          }, 500)
-        } else {
-          setIsLoading(false)
-        }
-      } else {
-        throw new Error("Failed to switch camera")
+  // Replace the getObjectFit function with this memoized and optimized version
+  const getObjectFit = useCallback((isLocalVideo: boolean = false) => {
+    // For screen sharing, always use contain to show the entire screen
+    if (isScreenSharing) return "contain";
+    
+    const {
+      localAspectRatio,
+      remoteAspectRatio,
+      isLocalPortrait,
+      isRemotePortrait
+    } = videoMetrics;
+    
+    const { isPortrait: isDevicePortrait } = windowDimensions;
+    
+    // For local video (PiP)
+    if (isLocalVideo) {
+      // If background removal is enabled, always use cover
+      if (backgroundRemovalEnabled) return "cover";
+      
+      // If it's a selfie camera (mirrored), prioritize seeing your face
+      if (shouldMirror) return "cover";
+      
+      // For back cameras or non-mirrored views, adapt based on aspect ratio
+      // If video and device have matching orientations, use cover
+      if ((isLocalPortrait && isDevicePortrait) || (!isLocalPortrait && !isDevicePortrait)) {
+        return "cover";
       }
-    } catch (err) {
-      console.error("Error switching camera:", err)
-      toast({
-        title: "Camera Switch Failed",
-        description: "Failed to switch camera. Please try again.",
-      })
-      setIsLoading(false)
+      // If orientations don't match, use contain to see everything
+      return "contain";
     }
-  }
+    
+    // For remote video (main view)
+    // If video and device have matching orientations, use cover for a more immersive experience
+    if ((isRemotePortrait && isDevicePortrait) || (!isRemotePortrait && !isDevicePortrait)) {
+      return "cover";
+    }
+    
+    // If video is landscape but device is portrait
+    if (!isRemotePortrait && isDevicePortrait) {
+      // For very wide videos (like 21:9 or wider), use contain to avoid excessive cropping
+      return remoteAspectRatio > 2.1 ? "contain" : "cover";
+    }
+    
+    // If video is portrait but device is landscape
+    if (isRemotePortrait && !isDevicePortrait) {
+      // For very tall videos, use contain
+      return remoteAspectRatio < 0.5 ? "contain" : "cover";
+    }
+    
+    // Default fallback
+    return "cover";
+  }, [videoMetrics, windowDimensions, isScreenSharing, backgroundRemovalEnabled, shouldMirror]);
+
+  // Update the useEffect that initializes mirroring state to run on component mount
+  useEffect(() => {
+    // Set initial mirror state when component mounts or camera changes
+    updateMirrorState()
+  }, [updateMirrorState])
+
+  // 4. Update the useEffect that handles camera stream changes to use CSS mirroring for local display
+  useEffect(() => {
+    if (cameraStream) {
+      // Apply current audio mute state
+      const audioTracks = cameraStream.getAudioTracks()
+      if (audioTracks.length > 0) {
+        audioTracks.forEach((track) => {
+          track.enabled = !isAudioMuted
+        })
+      }
+
+      // Apply current video enabled state
+      const videoTracks = cameraStream.getVideoTracks()
+      if (videoTracks.length > 0) {
+        videoTracks.forEach((track) => {
+          track.enabled = isVideoEnabled
+        })
+      }
+
+      // Set the local stream
+      setLocalStream(cameraStream)
+
+      // Process the stream for both local display and remote sending
+      ;(async () => {
+        if (!backgroundRemovalEnabled) {
+          // For remote stream: Process with canvas-based mirroring
+          const processedStream = await processCameraStream(cameraStream)
+
+          // For local display: Use the original stream with CSS mirroring
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = cameraStream
+            // CSS mirroring is applied via className
+          }
+
+          // If we're in a call, update the remote stream with the processed stream
+          if (activeCall) {
+            await updateRemoteStream(processedStream)
+          }
+        }
+      })()
+    }
+  }, [
+    cameraStream,
+    isAudioMuted,
+    isVideoEnabled,
+    activeCall,
+    backgroundRemovalEnabled,
+    updateRemoteStream,
+    processCameraStream,
+  ])
+
+  // Show toast if camera error occurs
+  useEffect(() => {
+    if (cameraError) {
+      toast({
+        title: "Camera Error",
+        description: cameraError,
+        variant: "destructive",
+      })
+    }
+  }, [cameraError, toast])
+
+  // Preload background images when the app starts
+  useEffect(() => {
+    preloadImages([
+      "/background/livingroom.jpg",
+      "/background/livingroom2.jpg",
+      "/background/livingroom3.jpg",
+      "/background/office.jpg",
+    ]).then(() => console.log("✅ All backgrounds preloaded!"))
+  }, [preloadImages])
+
+  // Set remote video source when remote stream changes
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream
+    }
+  }, [remoteStream])
+
+  // Handle call timer
+  useEffect(() => {
+    if (callStatus === "connected" && !callStartTime) {
+      const startTime = Date.now() // Fresh timestamp
+      setCallStartTime(startTime)
+
+      timerRef.current = setInterval(() => {
+        setCallDuration(Math.floor((Date.now() - startTime) / 1000)) // Use fresh timestamp
+      }, 1000)
+    } else if (callStatus !== "connected") {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      setCallStartTime(null)
+      setCallDuration(0)
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+    }
+  }, [callStatus]) // Remove callStartTime from dependencies
+
+  // Update the useEffect that handles incoming calls to use our memoized handleIncomingCall function
+  useEffect(() => {
+    if (!peer) return
+
+    peer.on("call", handleIncomingCall)
+
+    return () => {
+      peer.off("call", handleIncomingCall)
+    }
+  }, [peer, handleIncomingCall]) // Simplified dependency array since handleIncomingCall is now memoized
+
+  // Load background image when selected
+  useEffect(() => {
+    // Preload the selected background
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.src = selectedBackground
+    img.onload = () => {
+      backgroundImageRef.current = img
+      console.log(`✅ Background loaded: ${selectedBackground}`)
+
+      // If background removal is already enabled, we need to reprocess with the new background
+      if (backgroundRemovalEnabled && localStream) {
+        // Flag that we need to update
+        needsRemoteUpdateRef.current = true
+
+        // Process with new background
+        ;(async () => {
+          try {
+            setIsLoading(true)
+
+            // First, apply mirroring if needed before passing to background removal
+            const preparedStream = await prepareStreamForBackgroundRemoval(localStream)
+
+            const processedStream = await BackgroundProcessor.processStreamWithBackgroundRemoval({
+              stream: preparedStream,
+              selectedBackground,
+              isAudioMuted,
+              canvasRef,
+              backgroundImageRef,
+              setLocalStream: (stream) => {
+                processedStreamRef.current = stream
+
+                // Update the video source immediately
+                if (localVideoRef.current) {
+                  localVideoRef.current.srcObject = stream
+                }
+              },
+            })
+
+            // If in a call, update the remote stream
+            if (activeCall) {
+              await updateRemoteStream(processedStream)
+              needsRemoteUpdateRef.current = false
+            }
+          } catch (error) {
+            console.error("Error updating background:", error)
+            toast({
+              title: "Background Update Error",
+              description: "Failed to update background. Please try again.",
+              variant: "destructive",
+            })
+          } finally {
+            setIsLoading(false)
+          }
+        })()
+      }
+    }
+  }, [
+    selectedBackground,
+    backgroundRemovalEnabled,
+    localStream,
+    isAudioMuted,
+    activeCall,
+    toast,
+    updateRemoteStream,
+    prepareStreamForBackgroundRemoval,
+  ])
+
+  // Replace the existing useEffect for handling orientation changes with this optimized version
+  useEffect(() => {
+    const updateDimensions = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const isPortrait = height > width;
+      
+      setWindowDimensions(prev => {
+        // Only update if values have changed to prevent unnecessary re-renders
+        if (prev.width !== width || prev.height !== height || prev.isPortrait !== isPortrait) {
+          return { width, height, isPortrait };
+        }
+        return prev;
+      });
+    };
+    
+    // Initial update
+    updateDimensions();
+    
+    // Debounced resize handler to improve performance
+    const debouncedUpdateDimensions = debounce(updateDimensions, 200);
+    
+    window.addEventListener("resize", debouncedUpdateDimensions);
+    window.addEventListener("orientationchange", updateDimensions); // Immediate update on orientation change
+    
+    return () => {
+      window.removeEventListener("resize", debouncedUpdateDimensions);
+      window.removeEventListener("orientationchange", updateDimensions);
+    };
+  }, []);
+
+  // Replace the existing useEffect for tracking video track aspect ratio with this optimized version
+  useEffect(() => {
+    const updateVideoMetrics = () => {
+      if (!localStream && !remoteStream) return;
+      
+      const newMetrics = { ...videoMetrics };
+      let hasChanges = false;
+      
+      // Update local stream metrics
+      if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          const settings = videoTrack.getSettings();
+          if (settings.width && settings.height) {
+            const aspectRatio = settings.width / settings.height;
+            const isPortrait = settings.height > settings.width;
+            
+            if (newMetrics.localAspectRatio !== aspectRatio || newMetrics.isLocalPortrait !== isPortrait) {
+              newMetrics.localAspectRatio = aspectRatio;
+              newMetrics.isLocalPortrait = isPortrait;
+              hasChanges = true;
+            }
+          }
+        }
+      }
+      
+      // Update remote stream metrics
+      if (remoteStream) {
+        const videoTrack = remoteStream.getVideoTracks()[0];
+        if (videoTrack) {
+          const settings = videoTrack.getSettings();
+          if (settings.width && settings.height) {
+            const aspectRatio = settings.width / settings.height;
+            const isPortrait = settings.height > settings.width;
+            
+            if (newMetrics.remoteAspectRatio !== aspectRatio || newMetrics.isRemotePortrait !== isPortrait) {
+              newMetrics.remoteAspectRatio = aspectRatio;
+              newMetrics.isRemotePortrait = isPortrait;
+              hasChanges = true;
+            }
+          }
+        }
+      }
+      
+      // Only update state if there are actual changes
+      if (hasChanges) {
+        setVideoMetrics(newMetrics);
+      }
+    };
+    
+    // Update metrics immediately
+    updateVideoMetrics();
+    
+    // Set up interval to periodically check for changes (some browsers don't reliably fire events)
+    const intervalId = setInterval(updateVideoMetrics, 2000);
+    
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [localStream, remoteStream, videoMetrics]);
 
   // Add this new useEffect after the other useEffects to handle page visibility
   useEffect(() => {
@@ -1462,7 +1582,6 @@ export default function Home() {
   }, [isScreenSharing, activeCall])
 
   // Add a useEffect to handle screen share errors
-  // Add this after your other useEffects:
   useEffect(() => {
     if (screenShareError) {
       toast({
@@ -1472,9 +1591,6 @@ export default function Home() {
       })
     }
   }, [screenShareError, toast])
-
-  // Find the useScreenShare hook usage and add a useEffect to handle track ended events
-  // Add this after the existing useEffect for screen share errors
 
   // Add this useEffect to handle screen sharing track ended events (when user clicks Chrome's native "Stop sharing" button)
   useEffect(() => {
@@ -1512,7 +1628,14 @@ export default function Home() {
         })
       }
     }
-  }, [isScreenSharing, screenStream, toast, useCallback(stopScreenShare, [])])
+  }, [isScreenSharing, screenStream, toast, stopScreenShare])
+
+  // Format call duration as MM:SS
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
 
   // Show loading state while camera is initializing
   if (!isInitialized) {
@@ -1542,15 +1665,17 @@ export default function Home() {
               playsInline 
               className="w-full h-full" 
               style={{ objectFit: getObjectFit() }}
-              onResize={() => {
-                if (remoteStream) {
-                  const videoTrack = remoteStream.getVideoTracks()[0]
-                  if (videoTrack) {
-                    const settings = videoTrack.getSettings()
-                    if (settings.width && settings.height) {
-                      setAspectRatio(settings.width / settings.height)
-                    }
-                  }
+              onLoadedMetadata={(e) => {
+                const video = e.currentTarget;
+                if (video.videoWidth && video.videoHeight) {
+                  const aspectRatio = video.videoWidth / video.videoHeight;
+                  const isPortrait = video.videoHeight > video.videoWidth;
+                  
+                  setVideoMetrics(prev => ({
+                    ...prev,
+                    remoteAspectRatio: aspectRatio,
+                    isRemotePortrait: isPortrait
+                  }));
                 }
               }}
             />
@@ -1573,15 +1698,17 @@ export default function Home() {
                 muted
                 className={`w-full h-full ${shouldMirror && !backgroundRemovalEnabled ? "scale-x-[-1]" : ""}`}
                 style={{ objectFit: getObjectFit(true) }}
-                onResize={() => {
-                  if (localStream) {
-                    const videoTrack = localStream.getVideoTracks()[0]
-                    if (videoTrack) {
-                      const settings = videoTrack.getSettings()
-                      if (settings.width && settings.height) {
-                        setAspectRatio(settings.width / settings.height)
-                      }
-                    }
+                onLoadedMetadata={(e) => {
+                  const video = e.currentTarget;
+                  if (video.videoWidth && video.videoHeight) {
+                    const aspectRatio = video.videoWidth / video.videoHeight;
+                    const isPortrait = video.videoHeight > video.videoWidth;
+                    
+                    setVideoMetrics(prev => ({
+                      ...prev,
+                      localAspectRatio: aspectRatio,
+                      isLocalPortrait: isPortrait
+                    }));
                   }
                 }}
               />
@@ -1625,7 +1752,7 @@ export default function Home() {
               isVideoEnabled={isVideoEnabled}
               toggleVideo={toggleVideo}
               backgroundRemovalEnabled={backgroundRemovalEnabled}
-              setBackgroundRemovalEnabled={setBackgroundRemovalEnabled}
+              setBackgroundRemovalEnabled={handleBackgroundRemovalToggle}
               selectedBackground={selectedBackground}
               setSelectedBackground={setSelectedBackground}
               isLoading={isLoading}
