@@ -86,7 +86,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
           disabled={isLoading}
           size="icon"
           variant="default"
-          className="bg-green-500 hover:bg-green-600 rounded-full w-12 h-12 sm:w-14 sm:h-14"
+          className="bg-green-500 hover:bg-green-600 rounded-full w-10 h-10 sm:w-12 sm:h-12"
         >
           <Phone className="h-6 w-6 sm:h-7 sm:w-7" />
         </Button>
@@ -96,7 +96,7 @@ const ControlBar: React.FC<ControlBarProps> = ({
           disabled={isLoading}
           size="icon"
           variant="destructive"
-          className="rounded-full w-12 h-12 sm:w-14 sm:h-14"
+          className="rounded-full w-10 h-10 sm:w-12 sm:h-12"
         >
           <PhoneOff className="h-6 w-6 sm:h-7 sm:w-7" />
         </Button>
