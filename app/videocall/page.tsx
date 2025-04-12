@@ -1584,7 +1584,7 @@ export default function Home() {
       <PageSeo />
 
       <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4">
-        <div className="relative w-full max-w-5xl flex justify-center aspect-[9/16] xl:aspect-video rounded-2xl backdrop-blur-sm border border-white/20 shadow-xl overflow-hidden">
+        <div className="relative w-full max-w-5xl flex justify-center aspect-[9/16] xl:aspect-video rounded-2xl backdrop-blur-xl border border-white/20 shadow-xl overflow-hidden">
           {/* Remote Video */}
           {remoteStream ? (
             <video 
@@ -1608,7 +1608,7 @@ export default function Home() {
               }}
             />
           ) : (
-            <div className="flex flex-col items-center justify-center w-full h-full bg-white/10">
+            <div className="flex flex-col items-center justify-center w-full h-full bg-/10">
               <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mb-4 rounded-full bg-white">
                 <VideoIcon className="w-8 h-8 text-black" />
               </div>

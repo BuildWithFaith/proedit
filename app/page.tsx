@@ -84,7 +84,7 @@ export default function Home() {
             }}
             className="w-full max-w-lg"
           >
-            <div className="backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl overflow-hidden p-8">
+            <div className="backdrop-blur-xl rounded-3xl border bg-white/5 border-white/20 shadow-2xl overflow-hidden p-8">
               {/* Glassmorphism effect for visionOS */}
               <div className="absolute inset-0 bg-white/10 border-0 shadow-lg rounded-3xl pointer-events-none" />
 

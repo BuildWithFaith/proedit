@@ -696,14 +696,15 @@ export default function FilesPage() {
   }
 
   return (
+    <>
+    <PageSeo />
     <div className="min-h-screen flex items-center justify-center p-4">
-      <PageSeo />
       <div className="container max-w-4xl">
         {/* Main content area */}
         <div className="space-y-6">
           {/* File transfer area */}
           {isConnected ? (
-            <Card className="bg-white/10 border-0 shadow-lg rounded-3xl overflow-hidden">
+            <Card className="bg-white/10 border-0 shadow-lg backdrop-blur-xl rounded-3xl overflow-hidden">
               <CardContent className=" space-y-6 p-6 ">
                 <div
                   {...getRootProps()}
@@ -811,12 +812,12 @@ export default function FilesPage() {
 
           {/* History section */}
           <Card className="bg-white/10 backdrop-blur-xl border-0 shadow-lg rounded-3xl overflow-hidden">
-            <CardHeader className="border-b border-white/10 pb-4 flex flex-row justify-between items-center">
-              <CardTitle className="text-white text-2xl font-light">Transfer History</CardTitle>
+            <CardHeader className=" pb-4 flex flex-row justify-between items-center">
+              <CardTitle className="text-white text-2xl font-light">Recent Transfers</CardTitle>
               <Button
                 variant="ghost"
                 onClick={clearHistory}
-                className="rounded-xl bg-white/10 hover:bg-white/20 text-white"
+                className="rounded-xl bg-white text-black"
                 disabled={transferHistory.length === 0}
               >
                 <Trash2 className="h-4 w-4 mr-2" /> Clear All
@@ -827,7 +828,7 @@ export default function FilesPage() {
                 {transferHistory.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full py-12">
                     <FileX className="h-12 w-12 text-white/30 mb-2" />
-                    <p className="text-white/50">No transfer history</p>
+                    <p className="text-white/50">No Recent Transfers</p>
                   </div>
                 ) : (
                   <div className="p-2 md:p-4 space-y-2 md:space-y-3">
@@ -1004,5 +1005,6 @@ export default function FilesPage() {
         </div>
       )}
     </div>
+    </>
   )
 }
