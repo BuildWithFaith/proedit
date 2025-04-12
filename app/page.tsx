@@ -1,6 +1,6 @@
 "use client"
 
-import AppSeo from "@/components/Seo"
+import AppSeo from "@/components/AppSeo"
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence, LayoutGroup } from "motion/react"
 import { usePeer } from "@/contexts/PeerContext"

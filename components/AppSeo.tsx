@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   other: {
     "apple-mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "black-translucent",
-  },
+  }
 };
 
 export default function AppSeo() {
@@ -62,7 +62,6 @@ export default function AppSeo() {
   return (
     <>
       <Head>
-        
         {/* Add structured data */}
         <script
           type="application/ld+json"

@@ -5,6 +5,7 @@ import { Toaster } from "react-hot-toast";
 import "./globals.css";
 import { PeerProvider } from "@/contexts/PeerContext";
 import { MenuBar } from "@/components/menu-bar";
+import Head from "next/head";
 
 export const metadata: Metadata = {
   title: "File Sharing and Video Call App",
@@ -17,6 +18,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <Head>
+      <meta name="google-site-verification" content="ooOuBalAM5rJ67-HcQLZsEF1FCSsUysz0YPz6nC90Ds" />
+      </Head>
       <body className="antialiased">
         <PeerProvider>
           <MenuBar />
