@@ -2,7 +2,7 @@
 
 import React, { createContext, useState, useEffect, useContext } from "react";
 import Peer, { DataConnection } from "peerjs";
-import { useToast } from "@/components/ui/use-toast";
+import toast from "react-hot-toast"
 
 interface PeerContextType {
   peer: Peer | null;
@@ -25,15 +25,12 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [connectedPeerId, setConnectedPeerId] = useState<string | null>(null);
 
-  const { toast } = useToast();
-
   useEffect(() => {
     const newPeer = new Peer();
 
     newPeer.on("open", (id) => {
       setPeerId(id);
       setPeer(newPeer);
-      toast({ title: "Peer Connected", description: `Your ID: ${id}` });
     });
 
     newPeer.on("connection", (conn) => {
@@ -42,7 +39,7 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
       conn.on("open", () => {
         setIsConnected(true);
         setConnectedPeerId(conn.peer);
-        toast({ title: "Connected", description: `Connected to: ${conn.peer}` });
+        toast(`Connected to: ${conn.peer}`);
       });
 
       conn.on("data", (data) => {
@@ -57,11 +54,8 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
     });
 
     newPeer.on("error", (err) => {
-      toast({
-        title: "Connection Error",
-        description: err.message,
-        variant: "destructive"
-      });
+      toast.error(`Connection Error,
+        err.message`);
     });
 
     return () => {
@@ -79,7 +73,7 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
         setIsConnected(true);
         setConnectedPeerId(recipientId);
         setConnection(conn);
-        toast({ title: "Connected", description: `Connected to: ${recipientId}` });
+        toast(`Connected to: ${recipientId}`);
       });
 
       conn.on("close", () => {
@@ -88,11 +82,7 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
         setConnectedPeerId(null);
       });
     } catch (error) {
-      toast({
-        title: "Connection Failed",
-        description: "Failed to connect",
-        variant: "destructive"
-      });
+      toast.error("Failed to connect");
     }
   };
 
@@ -101,18 +91,15 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
     setIsConnected(false);
     setConnectedPeerId(null);
     setConnection(null);
-    toast({ title: "Disconnected", description: "Peer connection closed" });
+    toast.success(`Disconnected
+      Peer connection closed` );
   };
 
   const sendData = (data: any) => {
     if (connection?.open) {
       connection.send(data);
     } else {
-      toast({
-        title: "Error",
-        description: "No active connection",
-        variant: "destructive"
-      });
+      toast.error("No active connection");
     }
   };
 

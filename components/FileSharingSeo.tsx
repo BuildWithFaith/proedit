@@ -62,8 +62,6 @@ export default function PageSeo() {
   return (
     <>
       <Head>
-        {/* Preload relevant assets if any */}
-        <link rel="preload" href="/screenshots/file-share.png" as="image" />
 
         {/* Add structured data */}
         <script

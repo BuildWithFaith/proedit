@@ -62,9 +62,7 @@ export default function AppSeo() {
   return (
     <>
       <Head>
-        {/* Preload preview image */}
-        <link rel="preload" href="/screenshots/streamlet-app.png" as="image" />
-
+        
         {/* Add structured data */}
         <script
           type="application/ld+json"

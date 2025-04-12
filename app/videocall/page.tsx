@@ -6,7 +6,7 @@ import type { MediaConnection } from "peerjs"
 import ControlBar from "@/components/control-bar"
 import BackgroundProcessor from "@/components/background-processor"
 import { useCameraSwitch } from "@/hooks/use-camera-switch"
-import { useToast } from "@/hooks/use-toast"
+import toast from "react-hot-toast"
 import { Loader2, Monitor, VideoIcon } from 'lucide-react'
 // Import the useScreenShare hook at the top with other imports
 import { useScreenShare } from "@/hooks/use-screen-share"
@@ -34,7 +34,7 @@ function debounce(fn: Function, delay: number) {
 }
 
 export default function Home() {
-  const { peer, connectedPeerId, setConnectedPeerId } = usePeer()
+  const { peer, connectedPeerId } = usePeer()
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [selectedBackground, setSelectedBackground] = useState("/background/livingroom.jpg")
   const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false)
@@ -47,7 +47,6 @@ export default function Home() {
   const [callDuration, setCallDuration] = useState(0)
   const [callStartTime, setCallStartTime] = useState<number | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-  const { toast } = useToast()
 
   // Flag to track if background removal is in progress
   const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false)
@@ -396,29 +395,19 @@ export default function Home() {
 
       setIsLoading(false)
 
-      toast({
-        title: "Screen Sharing Stopped",
-        description: "Returned to camera view",
-      })
+      toast.success("Screen Sharing Stopped\nReturned to camera view")
     } catch (error) {
       console.error("Error stopping screen share:", error)
       setIsLoading(false)
-      toast({
-        title: "Error",
-        description: "Failed to stop screen sharing",
-        variant: "destructive",
-      })
+      toast.error("Failed to stop screen sharing",
+      )
     }
   }, [cameraStream, previousStream, processCameraStream, stopScreenShareHook, updateRemoteStream, toast])
 
   // Replace the existing startScreenShare function with this improved version
   const startScreenShare = useCallback(async () => {
     if (!activeCall || !activeCall.peerConnection) {
-      toast({
-        title: "No Active Call",
-        description: "You must be in a call to share your screen",
-        variant: "destructive",
-      })
+      toast.error("No Active Call\nYou must be in a call to share your screen")
       return
     }
 
@@ -434,17 +423,9 @@ export default function Home() {
         console.error("Error in startScreenShareHook:", error)
         // Check for common errors
         if (error.name === "NotAllowedError" || error.message?.includes("Permission")) {
-          toast({
-            title: "Permission Denied",
-            description: "You denied permission to share your screen",
-            variant: "destructive",
-          })
+          toast.error("Permission Denied\nYou denied permission to share your screen")
         } else {
-          toast({
-            title: "Screen Sharing Failed",
-            description: error.message || "Failed to start screen sharing",
-            variant: "destructive",
-          })
+          toast.error(`${error.message || "Failed to start screen sharing"} `)
         }
         return null
       })
@@ -480,10 +461,7 @@ export default function Home() {
       document.body.dataset.originalTitle = originalTitle
 
       setIsLoading(false)
-      toast({
-        title: "Screen Sharing Started",
-        description: "Your screen is now being shared",
-      })
+      toast.success("Screen Sharing Started\nYour screen is now being shared")
 
       // Add a class to indicate screen sharing is active
       document.body.classList.add("screen-sharing-active")
@@ -492,11 +470,7 @@ export default function Home() {
     } catch (error) {
       console.error("Error starting screen share:", error)
       setIsLoading(false)
-      toast({
-        title: "Screen Sharing Failed",
-        description: "Failed to start screen sharing. Please try again.",
-        variant: "destructive",
-      })
+      toast.error("Failed to start screen sharing. Please try again.")
       return null
     }
   }, [activeCall, localStream, startScreenShareHook, stopScreenShare, toast, updateRemoteStream])
@@ -531,20 +505,13 @@ export default function Home() {
           console.error("Call error:", err)
           setCallStatus("idle")
           setIsLoading(false)
-          toast({
-            title: "Call Error",
-            description: err.message || "An error occurred during the call",
-          })
+          toast.error(`${err.message || "An error occurred during the call"}`)
         })
       } else {
         console.error("No local stream available to answer call")
         setCallStatus("idle")
         setIsLoading(false)
-        toast({
-          title: "Call Error",
-          description: "No camera stream available to answer the call",
-          variant: "destructive",
-        })
+        toast.error("No camera stream available to answer the call")
       }
     },
     [localStream, toast],
@@ -681,11 +648,7 @@ export default function Home() {
           setBackgroundRemovalEnabled(!newEnabled)
 
           // Show error toast
-          toast({
-            title: "Background Removal Error",
-            description: "Failed to toggle background removal. Please try again.",
-            variant: "destructive",
-          })
+          toast.error("Failed to toggle background removal. Please try again")
 
           // Clean up if needed
           if (newEnabled) {
@@ -758,10 +721,7 @@ export default function Home() {
           })()
         }, 200) // Slightly longer delay to ensure camera info is updated
 
-        toast({
-          title: "Camera Switched",
-          description: `Switched to ${currentCameraName}`,
-        })
+        toast.success(`Camera Switched to ${currentCameraName}`)
 
         // If background removal is enabled, we need to reprocess the stream
         if (backgroundRemovalEnabled) {
@@ -781,10 +741,7 @@ export default function Home() {
       }
     } catch (err) {
       console.error("Error switching camera:", err)
-      toast({
-        title: "Camera Switch Failed",
-        description: "Failed to switch camera. Please try again.",
-      })
+      toast("Failed to switch camera. Please try again.")
       setIsLoading(false)
     }
   }, [
@@ -803,18 +760,12 @@ export default function Home() {
   // Start/End call functions
   const startCall = useCallback(async () => {
     if (!peer) {
-      toast({
-        title: "Connection Error",
-        description: "Peer connection not initialized. Please refresh the page and try again.",
-      })
+      toast.loading("Peer connection not initialized. Please refresh the page and try again.")
       return
     }
 
     if (!connectedPeerId) {
-      toast({
-        title: "Connection Error",
-        description: "No peer connected. Please connect to a peer first.",
-      })
+      toast.loading("No peer connected. Please connect to a peer first.")
       return
     }
 
@@ -911,10 +862,7 @@ export default function Home() {
         console.error("Call error:", err)
         setCallStatus("idle")
         setIsLoading(false)
-        toast({
-          title: "Call Error",
-          description: err.message || "An error occurred during the call",
-        })
+        toast.error(`${err.message || "An error occurred during the call"}`)
       })
 
       call.on("close", () => {
@@ -930,10 +878,7 @@ export default function Home() {
           call.close()
           setCallStatus("idle")
           setIsLoading(false)
-          toast({
-            title: "Call Timeout",
-            description: "The call took too long to connect. Please try again.",
-          })
+          toast.loading("The call took too long to connect. Please try again.")
         }
       }, 30000) // 30 second timeout
 
@@ -943,10 +888,7 @@ export default function Home() {
       console.error("Error starting call:", error)
       setCallStatus("idle")
       setIsLoading(false)
-      toast({
-        title: "Call Error",
-        description: error.message || "Failed to start call. Please check your camera and microphone.",
-      })
+      toast.error(`${error.message || "Failed to start call. Please check your camera and microphone."}`)
     }
   }, [
     peer, 
@@ -1243,11 +1185,7 @@ export default function Home() {
   // Show toast if camera error occurs
   useEffect(() => {
     if (cameraError) {
-      toast({
-        title: "Camera Error",
-        description: cameraError,
-        variant: "destructive",
-      })
+      toast.error(`Camera Error: ${cameraError}`)
     }
   }, [cameraError, toast])
 
@@ -1350,11 +1288,7 @@ export default function Home() {
             }
           } catch (error) {
             console.error("Error updating background:", error)
-            toast({
-              title: "Background Update Error",
-              description: "Failed to update background. Please try again.",
-              variant: "destructive",
-            })
+            toast.error("Failed to update background. Please try again.")
           } finally {
             setIsLoading(false)
           }
@@ -1584,11 +1518,8 @@ export default function Home() {
   // Add a useEffect to handle screen share errors
   useEffect(() => {
     if (screenShareError) {
-      toast({
-        title: "Screen Sharing Error",
-        description: screenShareError,
-        variant: "destructive",
-      })
+      toast.error(`Screen Sharing Error
+        ${screenShareError}`)
     }
   }, [screenShareError, toast])
 
@@ -1606,10 +1537,7 @@ export default function Home() {
 
         // Only handle if we're still in screen sharing state
         if (isScreenSharing) {
-          toast({
-            title: "Screen Sharing Stopped",
-            description: "Screen sharing was stopped from browser controls",
-          })
+          toast.success("Screen sharing stopped from browser controls")
 
           // Call our stopScreenShare function to properly clean up
           await stopScreenShare()
@@ -1663,7 +1591,7 @@ export default function Home() {
               ref={remoteVideoRef} 
               autoPlay 
               playsInline 
-              className="w-full h-full" 
+              className="w-full h-full aspect-video" 
               style={{ objectFit: getObjectFit() }}
               onLoadedMetadata={(e) => {
                 const video = e.currentTarget;

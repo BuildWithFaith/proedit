@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useCallback } from "react"
-import { toast } from "@/hooks/use-toast"
+import toast from "react-hot-toast"
 
 // Define types for file transfer
 export interface FileMetadata {
@@ -48,22 +48,14 @@ const FileWorkerManager = ({ onFileAssembled }: FileWorkerManagerProps) => {
             onFileAssembled(fileId, blob, metadata)
           } else if (type === "ERROR") {
             console.error("Worker error:", payload.error)
-            toast({
-              title: "File Transfer Error",
-              description: payload.error || "An error occurred during file transfer",
-              variant: "destructive",
-            })
+            toast.error(`${payload.error || "An error occurred during file transfer"}`)
           }
         }
 
         console.log("✅ File worker initialized successfully")
       } catch (error) {
         console.error("Failed to initialize file worker:", error)
-        toast({
-          title: "Worker Initialization Failed",
-          description: "Could not initialize file transfer system",
-          variant: "destructive",
-        })
+        toast.error("Worker Initialization Failed\nCould not initialize file transfer system")
       }
     }
 
@@ -100,11 +92,7 @@ const FileWorkerManager = ({ onFileAssembled }: FileWorkerManagerProps) => {
       console.log(`Processing file ${fileId} with ${sortedChunks.length} chunks`)
     } catch (error) {
       console.error("Error processing received file:", error)
-      toast({
-        title: "File Processing Error",
-        description: "Failed to process the received file",
-        variant: "destructive",
-      })
+      toast.error("File Processing Error\nFailed to process the received file")
     }
   }, [])
 

@@ -1,71 +1,50 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useCallback } from "react";
-import { Progress } from "@/components/ui/progress";
-import { useDropzone } from "react-dropzone";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Upload,
-  File,
-  Trash2,
-  Play,
-  Pause,
-  X,
-  FileText,
-  Image,
-  Video,
-  Music,
-  Archive,
-  FileX,
-} from "lucide-react";
-import { toast } from "@/hooks/use-toast";
-import { usePeer } from "@/contexts/PeerContext";
-import { Button } from "@/components/ui/button";
-import FileWorkerManager, {
-  type FileMetadata,
-} from "@/components/file-worker-manager";
-import PageSeo from "@/components/FileSharingSeo";
+import { useState, useEffect, useCallback } from "react"
+import { Progress } from "@/components/ui/progress"
+import { useDropzone } from "react-dropzone"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Upload, File, Trash2, Play, Pause, X, FileText, Image, Video, Music, Archive, FileX } from "lucide-react"
+import toast from "react-hot-toast"
+import { usePeer } from "@/contexts/PeerContext"
+import { Button } from "@/components/ui/button"
+import FileWorkerManager, { type FileMetadata } from "@/components/file-worker-manager"
+import PageSeo from "@/components/FileSharingSeo"
 
 interface TransferRecord {
-  id: string;
-  fileName: string;
-  fileType: string;
-  fileSize: number;
-  timestamp: number;
-  direction: "sent" | "received";
-  preview?: string;
-  blobUrl?: string; // Add this field to store blob URLs for non-previewable files
+  id: string
+  fileName: string
+  fileType: string
+  fileSize: number
+  timestamp: number
+  direction: "sent" | "received"
+  preview?: string
+  blobUrl?: string // Add this field to store blob URLs for non-previewable files
 }
 
 interface ActiveTransfer {
-  id: string;
-  metadata: FileMetadata;
-  progress: number;
-  status:
-    | "preparing"
-    | "transferring"
-    | "paused"
-    | "completed"
-    | "cancelled"
-    | "error";
-  direction: "sending" | "receiving";
-  file?: File;
-  chunks?: Map<number, Uint8Array>;
-  receivedSize: number;
-  startTime: number;
-  pausedAt?: number;
-  error?: string;
+  id: string
+  metadata: FileMetadata
+  progress: number
+  status: "preparing" | "transferring" | "paused" | "completed" | "cancelled" | "error"
+  direction: "sending" | "receiving"
+  file?: File
+  chunks?: Map<number, Uint8Array>
+  receivedSize: number
+  startTime: number
+  pausedAt?: number
+  error?: string
 }
 
 export default function FilesPage() {
-  const { connection, isConnected, connectedPeerId, sendData } = usePeer();
-  const [activeTransfers, setActiveTransfers] = useState<ActiveTransfer[]>([]);
-  const [transferHistory, setTransferHistory] = useState<TransferRecord[]>([]);
+  const { connection, isConnected, connectedPeerId, sendData } = usePeer()
+  const [activeTransfers, setActiveTransfers] = useState<ActiveTransfer[]>([])
+  const [transferHistory, setTransferHistory] = useState<TransferRecord[]>([])
   const [previewFile, setPreviewFile] = useState<{
-    record: TransferRecord;
-    content?: string | null;
-  }>();
+    record: TransferRecord
+    content?: string | null
+  }>()
 
   // Save transfer record to history
   const saveTransferRecord = useCallback(
@@ -73,44 +52,42 @@ export default function FilesPage() {
       // Ensure all files have some form of reference for downloading
       if (!record.preview && record.direction === "sent" && record.fileType) {
         // For non-previewable files that were sent, store a marker
-        record.preview = "blob-reference";
+        record.preview = "blob-reference"
 
         // Store the blob URL in a data attribute for later retrieval
         if (record.blobUrl) {
           setTimeout(() => {
-            const container = document.createElement("div");
-            container.style.display = "none";
-            container.setAttribute("data-file-id", record.id);
+            const container = document.createElement("div")
+            container.style.display = "none"
+            container.setAttribute("data-file-id", record.id)
             if (record.blobUrl) {
-              container.setAttribute("data-blob", record.blobUrl);
+              container.setAttribute("data-blob", record.blobUrl)
             }
-            document.body.appendChild(container);
-          }, 0);
+            document.body.appendChild(container)
+          }, 0)
         }
       }
 
       setTransferHistory((prev) => {
-        const newHistory = [...prev, record];
-        localStorage.setItem("transferHistory", JSON.stringify(newHistory));
-        return newHistory;
-      });
+        const newHistory = [...prev, record]
+        localStorage.setItem("transferHistory", JSON.stringify(newHistory))
+        return newHistory
+      })
     },
-    [setTransferHistory]
-  );
+    [setTransferHistory],
+  )
 
   // Handle file assembly when all chunks are received
   // Modify the handleFileAssembled function to only create records for received files
   const handleFileAssembled = useCallback(
     (fileId: string, blob: Blob, metadata: FileMetadata) => {
-      console.log(
-        `File assembled: ${fileId}, size: ${blob.size} bytes, type: ${metadata.type}`
-      );
+      console.log(`File assembled: ${fileId}, size: ${blob.size} bytes, type: ${metadata.type}`)
 
       // Create blob URL for all file types for download purposes
-      const blobUrl = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob)
 
       // Generate preview for supported file types
-      let preview: string | undefined = undefined;
+      let preview: string | undefined = undefined
 
       // Only set preview for previewable types
       if (
@@ -118,7 +95,7 @@ export default function FilesPage() {
         metadata.type.startsWith("video/") ||
         metadata.type.startsWith("audio/")
       ) {
-        preview = blobUrl;
+        preview = blobUrl
       } else if (
         metadata.type.startsWith("text/") ||
         metadata.type.includes("json") ||
@@ -126,20 +103,20 @@ export default function FilesPage() {
         metadata.type.includes("css")
       ) {
         // For text files, we'll store 'text' as a marker and handle the actual content when previewing
-        preview = "text";
+        preview = "text"
       } else {
         // For non-previewable files, store a reference
-        preview = "blob-reference";
+        preview = "blob-reference"
       }
 
       // Store the blob URL in a data attribute for later retrieval
       setTimeout(() => {
-        const container = document.createElement("div");
-        container.style.display = "none";
-        container.setAttribute("data-file-id", fileId);
-        container.setAttribute("data-blob", blobUrl);
-        document.body.appendChild(container);
-      }, 0);
+        const container = document.createElement("div")
+        container.style.display = "none"
+        container.setAttribute("data-file-id", fileId)
+        container.setAttribute("data-blob", blobUrl)
+        document.body.appendChild(container)
+      }, 0)
 
       // Save to transfer history - only for received files
       const record: TransferRecord = {
@@ -151,66 +128,53 @@ export default function FilesPage() {
         direction: "received",
         preview,
         blobUrl,
-      };
+      }
 
-      saveTransferRecord(record);
+      saveTransferRecord(record)
 
       // Let the user know the file is ready
-      toast({
-        title: "File Received",
-        description: `File ready: ${metadata.name}`,
-      });
+      toast(`File Received
+        File ready: ${metadata.name}`)
 
       // Remove from active transfers immediately
-      setActiveTransfers((prev) => prev.filter((t) => t.id !== fileId));
+      setActiveTransfers((prev) => prev.filter((t) => t.id !== fileId))
     },
-    [saveTransferRecord]
-  );
+    [saveTransferRecord],
+  )
 
   // Initialize our file worker manager
   const { processReceivedFile, chunkFile } = FileWorkerManager({
     onFileAssembled: handleFileAssembled,
-  });
+  })
 
   // Process received file when all chunks are received
   const handleCompleteFileReceived = useCallback(
     (transfer: ActiveTransfer) => {
-      if (
-        transfer.chunks &&
-        transfer.chunks.size === transfer.metadata.totalChunks
-      ) {
-        console.log(
-          `All chunks received for file ${transfer.id}. Processing...`
-        );
-        processReceivedFile(transfer.id, transfer.chunks, transfer.metadata);
+      if (transfer.chunks && transfer.chunks.size === transfer.metadata.totalChunks) {
+        console.log(`All chunks received for file ${transfer.id}. Processing...`)
+        processReceivedFile(transfer.id, transfer.chunks, transfer.metadata)
 
         // Update status to completed
         setActiveTransfers((prev) =>
-          prev.map((t) =>
-            t.id === transfer.id
-              ? { ...t, status: "completed", progress: 100 }
-              : t
-          )
-        );
+          prev.map((t) => (t.id === transfer.id ? { ...t, status: "completed", progress: 100 } : t)),
+        )
       }
     },
-    [processReceivedFile]
-  );
+    [processReceivedFile],
+  )
 
   // Handle data received from peer
   useEffect(() => {
-    if (!connection) return;
+    if (!connection) return
 
     const handleData = (data: any) => {
-      if (!data || typeof data !== "object") return;
+      if (!data || typeof data !== "object") return
 
       try {
         // Handle file metadata
         if ("metadata" in data) {
-          const metadata = data.metadata as FileMetadata;
-          console.log(
-            `Received file metadata: ${metadata.name} (${metadata.size} bytes)`
-          );
+          const metadata = data.metadata as FileMetadata
+          console.log(`Received file metadata: ${metadata.name} (${metadata.size} bytes)`)
 
           // Create a new transfer record
           const newTransfer: ActiveTransfer = {
@@ -222,51 +186,41 @@ export default function FilesPage() {
             chunks: new Map(),
             receivedSize: 0,
             startTime: Date.now(),
-          };
+          }
 
-          setActiveTransfers((prev) => [...prev, newTransfer]);
+          setActiveTransfers((prev) => [...prev, newTransfer])
 
-          toast({
-            title: "Receiving File",
-            description: `Starting to receive: ${metadata.name}`,
-          });
+          toast(`Receiving File
+            Starting to receive: ${metadata.name}`)
         }
         // Handle file chunk
         else if ("fileId" in data && "index" in data && "data" in data) {
           const chunk = data as {
-            fileId: string;
-            index: number;
-            data: ArrayBuffer;
-          };
+            fileId: string
+            index: number
+            data: ArrayBuffer
+          }
 
           setActiveTransfers((prev) => {
             return prev.map((transfer) => {
-              if (
-                transfer.id === chunk.fileId &&
-                transfer.status === "transferring"
-              ) {
+              if (transfer.id === chunk.fileId && transfer.status === "transferring") {
                 // Get existing chunks
-                const chunks = transfer.chunks || new Map();
+                const chunks = transfer.chunks || new Map()
 
                 // Add new chunk as Uint8Array
-                chunks.set(chunk.index, new Uint8Array(chunk.data));
+                chunks.set(chunk.index, new Uint8Array(chunk.data))
 
                 // Calculate received size
-                const receivedSize =
-                  transfer.receivedSize + chunk.data.byteLength;
+                const receivedSize = transfer.receivedSize + chunk.data.byteLength
 
                 // Calculate progress
-                const progress =
-                  (chunks.size / transfer.metadata.totalChunks) * 100;
+                const progress = (chunks.size / transfer.metadata.totalChunks) * 100
 
                 // Check if all chunks received
-                const isComplete =
-                  chunks.size === transfer.metadata.totalChunks;
+                const isComplete = chunks.size === transfer.metadata.totalChunks
 
                 if (isComplete) {
-                  console.log(
-                    `All chunks received for file ${transfer.id}. Will process soon...`
-                  );
+                  console.log(`All chunks received for file ${transfer.id}. Will process soon...`)
                   // Process file in the next tick to avoid state update conflicts
                   setTimeout(() => {
                     handleCompleteFileReceived({
@@ -274,8 +228,8 @@ export default function FilesPage() {
                       chunks,
                       receivedSize,
                       progress: 100,
-                    });
-                  }, 100);
+                    })
+                  }, 100)
                 }
 
                 return {
@@ -284,82 +238,58 @@ export default function FilesPage() {
                   receivedSize,
                   progress,
                   status: isComplete ? "completed" : "transferring",
-                };
+                }
               }
-              return transfer;
-            });
-          });
+              return transfer
+            })
+          })
         }
         // Handle control messages
-        else if (
-          "control" in data &&
-          data.control &&
-          "fileId" in data.control
-        ) {
-          const { fileId, action } = data.control;
+        else if ("control" in data && data.control && "fileId" in data.control) {
+          const { fileId, action } = data.control
 
           if (action === "pause") {
-            setActiveTransfers((prev) =>
-              prev.map((t) =>
-                t.id === fileId ? { ...t, status: "paused" } : t
-              )
-            );
+            setActiveTransfers((prev) => prev.map((t) => (t.id === fileId ? { ...t, status: "paused" } : t)))
           } else if (action === "resume") {
-            setActiveTransfers((prev) =>
-              prev.map((t) =>
-                t.id === fileId ? { ...t, status: "transferring" } : t
-              )
-            );
+            setActiveTransfers((prev) => prev.map((t) => (t.id === fileId ? { ...t, status: "transferring" } : t)))
           } else if (action === "cancel") {
-            setActiveTransfers((prev) =>
-              prev.map((t) =>
-                t.id === fileId ? { ...t, status: "cancelled" } : t
-              )
-            );
+            setActiveTransfers((prev) => prev.map((t) => (t.id === fileId ? { ...t, status: "cancelled" } : t)))
 
             // Remove from active transfers after a delay
             setTimeout(() => {
-              setActiveTransfers((prev) => prev.filter((t) => t.id !== fileId));
-            }, 3000);
+              setActiveTransfers((prev) => prev.filter((t) => t.id !== fileId))
+            }, 3000)
           }
         }
       } catch (error) {
-        console.error("Error processing received data:", error);
+        console.error("Error processing received data:", error)
       }
-    };
+    }
 
-    connection.on("data", handleData);
+    connection.on("data", handleData)
 
     return () => {
-      connection.off("data", handleData);
-    };
-  }, [connection, handleCompleteFileReceived]);
+      connection.off("data", handleData)
+    }
+  }, [connection, handleCompleteFileReceived])
 
   // Load history on mount
   useEffect(() => {
-    const savedHistory = localStorage.getItem("transferHistory");
-    if (savedHistory) {
-      try {
-        setTransferHistory(JSON.parse(savedHistory));
-      } catch (error) {
-        console.error("Error parsing transfer history:", error);
-      }
-    }
-  }, []);
+    // Clear any existing history in localStorage when the component mounts
+    localStorage.removeItem("transferHistory")
+    // Initialize with empty history
+    setTransferHistory([])
+  }, [])
 
   // Send file using our file worker manager
   const sendFile = useCallback(
     (file: File) => {
       if (!connection || !isConnected) {
-        toast({
-          title: "Error",
-          description: "Not connected to a peer",
-          variant: "destructive",
-        });
-        return;
+        toast("Not connected to a peer")
+        return
       }
 
-      console.log(`Preparing to send file: ${file.name} (${file.size} bytes)`);
+      console.log(`Preparing to send file: ${file.name} (${file.size} bytes)`)
 
       // Create a new transfer record
       const newTransfer: ActiveTransfer = {
@@ -377,10 +307,10 @@ export default function FilesPage() {
         file,
         receivedSize: 0,
         startTime: Date.now(),
-      };
+      }
 
       // Add to active transfers
-      setActiveTransfers((prev) => [...prev, newTransfer]);
+      setActiveTransfers((prev) => [...prev, newTransfer])
 
       // Start chunking the file
       const { fileId, metadata } = chunkFile({
@@ -388,80 +318,71 @@ export default function FilesPage() {
         onChunkReady: (chunk) => {
           // Send chunk to peer
           if (connection && connection.open) {
-            sendData(chunk);
+            sendData(chunk)
           }
         },
         onProgress: (progress) => {
           // Update progress
           setActiveTransfers((prev) =>
             prev.map((t) =>
-              t.metadata.name === file.name &&
-              t.startTime === newTransfer.startTime
-                ? { ...t, progress }
-                : t
-            )
-          );
+              t.metadata.name === file.name && t.startTime === newTransfer.startTime ? { ...t, progress } : t,
+            ),
+          )
         },
         // In your sendFile function, within the chunkFile's onComplete callback, modify this part:
 
         onComplete: () => {
-          console.log(`File ${file.name} sent successfully`);
+          console.log(`File ${file.name} sent successfully`)
 
           // Update status to completed
           setActiveTransfers((prev) =>
-            prev.map((t) =>
-              t.id === fileId ? { ...t, status: "completed", progress: 100 } : t
-            )
-          );
+            prev.map((t) => (t.id === fileId ? { ...t, status: "completed", progress: 100 } : t)),
+          )
 
           // Only add to history for the sender (not for the receiver)
           // This prevents duplicate entries
           if (newTransfer.direction === "sending") {
             // Create preview for sent file
-            let preview: string | undefined = undefined;
-            let blobUrl: string | undefined = undefined;
+            let preview: string | undefined = undefined
+            let blobUrl: string | undefined = undefined
 
             // Create blob URL for all file types for download purposes
-            const blob = new Blob([file], { type: file.type });
-            blobUrl = URL.createObjectURL(blob);
+            const blob = new Blob([file], { type: file.type })
+            blobUrl = URL.createObjectURL(blob)
 
             // Only set preview for previewable types
-            if (
-              file.type.startsWith("image/") ||
-              file.type.startsWith("video/") ||
-              file.type.startsWith("audio/")
-            ) {
-              preview = blobUrl;
+            if (file.type.startsWith("image/") || file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+              preview = blobUrl
             } else if (
               file.type.startsWith("text/") ||
               file.type.includes("json") ||
               file.type.includes("javascript") ||
               file.type.includes("css")
             ) {
-              preview = "text";
+              preview = "text"
 
               // Store the file content for preview
-              const reader = new FileReader();
+              const reader = new FileReader()
               reader.onload = (e) => {
                 if (e.target?.result) {
-                  const container = document.createElement("div");
-                  container.style.display = "none";
-                  container.setAttribute("data-file-id", fileId);
-                  container.setAttribute("data-blob", blobUrl);
-                  document.body.appendChild(container);
+                  const container = document.createElement("div")
+                  container.style.display = "none"
+                  container.setAttribute("data-file-id", fileId)
+                  container.setAttribute("data-blob", blobUrl)
+                  document.body.appendChild(container)
                 }
-              };
-              reader.readAsArrayBuffer(file);
+              }
+              reader.readAsArrayBuffer(file)
             } else {
               // For non-previewable files, store a reference
-              preview = "blob-reference";
+              preview = "blob-reference"
 
               // Store the blob URL for download
-              const container = document.createElement("div");
-              container.style.display = "none";
-              container.setAttribute("data-file-id", fileId);
-              container.setAttribute("data-blob", blobUrl);
-              document.body.appendChild(container);
+              const container = document.createElement("div")
+              container.style.display = "none"
+              container.setAttribute("data-file-id", fileId)
+              container.setAttribute("data-blob", blobUrl)
+              document.body.appendChild(container)
             }
 
             // Add to history
@@ -474,73 +395,62 @@ export default function FilesPage() {
               direction: "sent",
               preview,
               blobUrl,
-            });
+            })
           }
 
           // Show toast
-          toast({
-            title: "File Sent",
-            description: `File sent successfully: ${file.name}`,
-          });
+          toast.success(`File Sent
+            File sent successfully: ${file.name}`)
 
           // Remove from active transfers after a short delay
           setTimeout(() => {
-            setActiveTransfers((prev) => prev.filter((t) => t.id !== fileId));
-          }, 1000);
+            setActiveTransfers((prev) => prev.filter((t) => t.id !== fileId))
+          }, 1000)
         },
         onError: (error) => {
-          console.error(`Error sending file ${file.name}:`, error);
+          console.error(`Error sending file ${file.name}:`, error)
 
           // Update status to error
           setActiveTransfers((prev) =>
             prev.map((t) =>
-              t.metadata.name === file.name &&
-              t.startTime === newTransfer.startTime
+              t.metadata.name === file.name && t.startTime === newTransfer.startTime
                 ? { ...t, status: "error", error }
-                : t
-            )
-          );
+                : t,
+            ),
+          )
 
           // Show toast
-          toast({
-            title: "File Send Error",
-            description: error,
-            variant: "destructive",
-          });
+          toast("File Send Error")
         },
-      });
+      })
 
       // Send metadata first
-      sendData({ metadata });
+      sendData({ metadata })
 
       // Update the transfer with the file ID and metadata
       setActiveTransfers((prev) =>
         prev.map((t) =>
           t.metadata.name === file.name && t.startTime === newTransfer.startTime
             ? { ...t, id: fileId, metadata, status: "transferring" }
-            : t
-        )
-      );
+            : t,
+        ),
+      )
     },
-    [connection, isConnected, sendData, chunkFile, saveTransferRecord]
-  );
+    [connection, isConnected, sendData, chunkFile, saveTransferRecord],
+  )
 
   // File drop handling
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
       if (isConnected) {
         acceptedFiles.forEach((file) => {
-          sendFile(file);
-        });
+          sendFile(file)
+        })
       } else {
-        toast({
-          title: "Error",
-          description: "Please connect to a peer before sending files",
-          variant: "destructive",
-        });
+        toast("Please connect to a peer before sending files")
       }
     },
-  });
+  })
 
   // Control handlers for transfers
   const pauseTransfer = useCallback(
@@ -551,19 +461,15 @@ export default function FilesPage() {
             fileId: transfer.id,
             action: "pause",
           },
-        });
+        })
 
         setActiveTransfers((prev) =>
-          prev.map((t) =>
-            t.id === transfer.id
-              ? { ...t, status: "paused", pausedAt: Date.now() }
-              : t
-          )
-        );
+          prev.map((t) => (t.id === transfer.id ? { ...t, status: "paused", pausedAt: Date.now() } : t)),
+        )
       }
     },
-    [connection, sendData]
-  );
+    [connection, sendData],
+  )
 
   const resumeTransfer = useCallback(
     (transfer: ActiveTransfer) => {
@@ -573,57 +479,46 @@ export default function FilesPage() {
             fileId: transfer.id,
             action: "resume",
           },
-        });
+        })
 
         setActiveTransfers((prev) =>
-          prev.map((t) =>
-            t.id === transfer.id
-              ? { ...t, status: "transferring", pausedAt: undefined }
-              : t
-          )
-        );
+          prev.map((t) => (t.id === transfer.id ? { ...t, status: "transferring", pausedAt: undefined } : t)),
+        )
       }
     },
-    [connection, sendData]
-  );
+    [connection, sendData],
+  )
 
   const cancelTransfer = useCallback(
     (transfer: ActiveTransfer) => {
       if (connection) {
-        const transferId = transfer.id; // Store the ID to avoid closure issues
+        const transferId = transfer.id // Store the ID to avoid closure issues
 
         sendData({
           control: {
             fileId: transferId,
             action: "cancel",
           },
-        });
+        })
 
-        setActiveTransfers((prev) =>
-          prev.map((t) =>
-            t.id === transferId ? { ...t, status: "cancelled" } : t
-          )
-        );
+        setActiveTransfers((prev) => prev.map((t) => (t.id === transferId ? { ...t, status: "cancelled" } : t)))
 
         // Remove from active transfers after a delay
         setTimeout(() => {
-          setActiveTransfers((prev) => prev.filter((t) => t.id !== transferId));
-        }, 3000);
+          setActiveTransfers((prev) => prev.filter((t) => t.id !== transferId))
+        }, 3000)
       }
     },
-    [connection, sendData]
-  );
+    [connection, sendData],
+  )
 
   // Preview file content
   const previewFileContent = useCallback(
     async (record: TransferRecord) => {
       if (!record.preview) {
-        toast({
-          title: "Preview Unavailable",
-          description: "This file cannot be previewed",
-          variant: "destructive",
-        });
-        return;
+        toast(`Preview Unavailable
+          This file cannot be previewed`)
+        return
       }
 
       // For images, videos, and audio, we already have the preview URL
@@ -632,8 +527,8 @@ export default function FilesPage() {
         record.fileType.startsWith("video/") ||
         record.fileType.startsWith("audio/")
       ) {
-        setPreviewFile({ record });
-        return;
+        setPreviewFile({ record })
+        return
       }
 
       // For text files and other text-based formats
@@ -646,198 +541,163 @@ export default function FilesPage() {
       ) {
         try {
           // Find the file in the DOM (it should have been saved as a blob)
-          const fileBlob = document
-            .querySelector(`[data-file-id="${record.id}"]`)
-            ?.getAttribute("data-blob");
+          const fileBlob = document.querySelector(`[data-file-id="${record.id}"]`)?.getAttribute("data-blob")
 
           if (fileBlob) {
-            const blob = await fetch(fileBlob).then((r) => r.blob());
-            const text = await blob.text();
-            setPreviewFile({ record, content: text });
+            const blob = await fetch(fileBlob).then((r) => r.blob())
+            const text = await blob.text()
+            setPreviewFile({ record, content: text })
           } else {
             // If we can't find the blob in the DOM, check if this is a sent file
             // that might still be accessible in the browser's memory
             if (record.direction === "sent") {
               // Try to find the file in active transfers (though it should have been moved to history)
-              const transfer = activeTransfers.find((t) => t.id === record.id);
+              const transfer = activeTransfers.find((t) => t.id === record.id)
               if (transfer && transfer.file) {
-                const text = await transfer.file.text();
-                setPreviewFile({ record, content: text });
-                return;
+                const text = await transfer.file.text()
+                setPreviewFile({ record, content: text })
+                return
               }
             }
 
-            toast({
-              title: "Preview Unavailable",
-              description: "Text content could not be loaded",
-              variant: "destructive",
-            });
+            toast(`Preview Unavailable
+              Text content could not be loaded`)
           }
         } catch (error) {
-          console.error("Error loading text preview:", error);
-          toast({
-            title: "Preview Error",
-            description: "Failed to load text content",
-            variant: "destructive",
-          });
+          console.error("Error loading text preview:", error)
+          toast(`Preview Error
+            Failed to load text content`)
         }
       } else {
         // For other file types
-        toast({
-          title: "Preview Unavailable",
-          description: `Preview not supported for ${record.fileType} files`,
-        });
+        toast(`Preview Unavailable
+          Preview not supported for ${record.fileType} files`)
       }
     },
-    [toast, activeTransfers]
-  );
+    [toast, activeTransfers],
+  )
 
   // Download file from history
   const downloadFile = useCallback(
     (record: TransferRecord) => {
       // For files with direct blob URLs (images, videos, audio)
-      if (
-        record.preview &&
-        record.preview !== "text" &&
-        record.preview !== "blob-reference"
-      ) {
-        const a = document.createElement("a");
-        a.href = record.preview;
-        a.download = record.fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        return;
+      if (record.preview && record.preview !== "text" && record.preview !== "blob-reference") {
+        const a = document.createElement("a")
+        a.href = record.preview
+        a.download = record.fileName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        return
       }
 
       // For text files and other files that need to be retrieved from the DOM
-      const fileBlob = document
-        .querySelector(`[data-file-id="${record.id}"]`)
-        ?.getAttribute("data-blob");
+      const fileBlob = document.querySelector(`[data-file-id="${record.id}"]`)?.getAttribute("data-blob")
       if (fileBlob) {
-        const a = document.createElement("a");
-        a.href = fileBlob;
-        a.download = record.fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        return;
+        const a = document.createElement("a")
+        a.href = fileBlob
+        a.download = record.fileName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        return
       }
 
       // If we can't find the blob in the DOM, check if this is a sent file
       // that might still be accessible in the browser's memory
       if (record.direction === "sent") {
         // Try to find the file in active transfers
-        const transfer = activeTransfers.find((t) => t.id === record.id);
+        const transfer = activeTransfers.find((t) => t.id === record.id)
         if (transfer && transfer.file) {
-          const url = URL.createObjectURL(transfer.file);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = record.fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          return;
+          const url = URL.createObjectURL(transfer.file)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = record.fileName
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+          return
         }
       }
 
-      toast({
-        title: "Download Failed",
-        description: "Could not find the file data",
-        variant: "destructive",
-      });
+      toast(`Download Failed
+        Could not find the file data`)
     },
-    [toast, activeTransfers]
-  );
+    [toast, activeTransfers],
+  )
 
   // Remove single history item
   const removeHistoryItem = useCallback((id: string) => {
     setTransferHistory((prev) => {
-      const newHistory = prev.filter((item) => item.id !== id);
-      localStorage.setItem("transferHistory", JSON.stringify(newHistory));
-      return newHistory;
-    });
+      const newHistory = prev.filter((item) => item.id !== id)
+      localStorage.setItem("transferHistory", JSON.stringify(newHistory))
+      return newHistory
+    })
 
-    toast({
-      title: "Item Removed",
-      description: "Transfer history item has been removed.",
-    });
-  }, []);
+    toast(`Item Removed
+      Transfer history item has been removed.`)
+  }, [])
 
   // Clear all history
   const clearHistory = () => {
-    setTransferHistory([]);
-    localStorage.removeItem("transferHistory");
-    toast({
-      title: "History Cleared",
-      description: "Transfer history has been cleared.",
-    });
-  };
+    setTransferHistory([])
+    localStorage.removeItem("transferHistory")
+    toast(`History Cleared
+      Transfer history has been cleared.`)
+  }
 
   // Close preview
-  const closePreview = () => setPreviewFile(undefined);
+  const closePreview = () => setPreviewFile(undefined)
 
   // Get file type icon based on mime type
   const getFileIcon = (type: string) => {
-    if (type.startsWith("image/"))
-      return <Image className="h-6 w-6 text-white" />;
-    if (type.startsWith("video/"))
-      return <Video className="h-6 w-6 text-white" />;
-    if (type.startsWith("audio/"))
-      return <Music className="h-6 w-6 text-white" />;
-    if (type.startsWith("text/"))
-      return <FileText className="h-6 w-6 text-white" />;
-    if (
-      type.includes("zip") ||
-      type.includes("rar") ||
-      type.includes("tar") ||
-      type.includes("7z")
-    )
-      return <Archive className="h-6 w-6 text-white" />;
-    return <File className="h-6 w-6 text-white" />;
-  };
+    if (type.startsWith("image/")) return <Image className="h-6 w-6 text-white" />
+    if (type.startsWith("video/")) return <Video className="h-6 w-6 text-white" />
+    if (type.startsWith("audio/")) return <Music className="h-6 w-6 text-white" />
+    if (type.startsWith("text/")) return <FileText className="h-6 w-6 text-white" />
+    if (type.includes("zip") || type.includes("rar") || type.includes("tar") || type.includes("7z"))
+      return <Archive className="h-6 w-6 text-white" />
+    return <File className="h-6 w-6 text-white" />
+  }
 
   // Calculate transfer speed and ETA
   const getTransferStats = (transfer: ActiveTransfer) => {
-    const elapsedTime = (transfer.pausedAt || Date.now()) - transfer.startTime;
-    const elapsedSeconds = elapsedTime / 1000;
+    const elapsedTime = (transfer.pausedAt || Date.now()) - transfer.startTime
+    const elapsedSeconds = elapsedTime / 1000
 
-    if (elapsedSeconds === 0) return { speed: "0 KB/s", eta: "calculating..." };
+    if (elapsedSeconds === 0) return { speed: "0 KB/s", eta: "calculating..." }
 
     const transferredBytes =
-      transfer.direction === "sending"
-        ? transfer.metadata.size * (transfer.progress / 100)
-        : transfer.receivedSize;
+      transfer.direction === "sending" ? transfer.metadata.size * (transfer.progress / 100) : transfer.receivedSize
 
-    const bytesPerSecond = transferredBytes / elapsedSeconds;
+    const bytesPerSecond = transferredBytes / elapsedSeconds
 
     // Format speed
-    let speed = "0 KB/s";
+    let speed = "0 KB/s"
     if (bytesPerSecond > 1024 * 1024) {
-      speed = `${(bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`;
+      speed = `${(bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`
     } else {
-      speed = `${(bytesPerSecond / 1024).toFixed(2)} KB/s`;
+      speed = `${(bytesPerSecond / 1024).toFixed(2)} KB/s`
     }
 
     // Calculate ETA
-    const remainingBytes = transfer.metadata.size - transferredBytes;
-    const remainingSeconds =
-      bytesPerSecond > 0 ? remainingBytes / bytesPerSecond : 0;
+    const remainingBytes = transfer.metadata.size - transferredBytes
+    const remainingSeconds = bytesPerSecond > 0 ? remainingBytes / bytesPerSecond : 0
 
-    let eta = "calculating...";
+    let eta = "calculating..."
     if (remainingSeconds > 60) {
-      eta = `${Math.ceil(remainingSeconds / 60)} min`;
+      eta = `${Math.ceil(remainingSeconds / 60)} min`
     } else {
-      eta = `${Math.ceil(remainingSeconds)} sec`;
+      eta = `${Math.ceil(remainingSeconds)} sec`
     }
 
-    return { speed, eta };
-  };
+    return { speed, eta }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <PageSeo/>
+      <PageSeo />
       <div className="container max-w-4xl">
         {/* Main content area */}
         <div className="space-y-6">
@@ -848,21 +708,15 @@ export default function FilesPage() {
                 <div
                   {...getRootProps()}
                   className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors ${
-                    isDragActive
-                      ? "border-purple-400 bg-purple-400/10"
-                      : "border-white/30 hover:border-white/50"
+                    isDragActive ? "border-purple-400 bg-purple-400/10" : "border-white/30 hover:border-white/50"
                   }`}
                 >
                   <input {...getInputProps()} />
                   <div className="bg-white/20 rounded-full p-4 w-20 h-20 mx-auto flex items-center justify-center">
                     <Upload className="h-10 w-10 text-white" />
                   </div>
-                  <p className="mt-4 text-white/80">
-                    Drag files here or click to select
-                  </p>
-                  <p className="text-white/50 text-sm mt-1">
-                    Share files securely with your connected peer
-                  </p>
+                  <p className="mt-4 text-white/80">Drag files here or click to select</p>
+                  <p className="text-white/50 text-sm mt-1">Share files securely with your connected peer</p>
                 </div>
 
                 {/* Active transfers list */}
@@ -871,31 +725,22 @@ export default function FilesPage() {
                     <h3 className="text-white text-lg">Active Transfers</h3>
                     <div className="space-y-3">
                       {activeTransfers.map((transfer, index) => {
-                        const { speed, eta } = getTransferStats(transfer);
+                        const { speed, eta } = getTransferStats(transfer)
                         // Ensure we have a valid ID, or generate a fallback
                         const transferKey = transfer.id
                           ? `active-${transfer.id}-${index}`
-                          : `transfer-${transfer.metadata.name}-${transfer.startTime}-${index}`;
+                          : `transfer-${transfer.metadata.name}-${transfer.startTime}-${index}`
                         return (
-                          <div
-                            key={transferKey}
-                            className="bg-white/5 p-4 rounded-xl border border-white/10"
-                          >
+                          <div key={transferKey} className="bg-white/5 p-4 rounded-xl border border-white/10">
                             <div className="flex justify-between items-start">
                               <div className="flex items-center">
                                 <div className="bg-white/10 p-2 rounded-lg mr-3">
                                   {getFileIcon(transfer.metadata.type)}
                                 </div>
                                 <div>
-                                  <p className="text-white text-sm font-medium">
-                                    {transfer.metadata.name}
-                                  </p>
+                                  <p className="text-white text-sm font-medium">{transfer.metadata.name}</p>
                                   <p className="text-white/50 text-xs">
-                                    {(
-                                      transfer.metadata.size /
-                                      (1024 * 1024)
-                                    ).toFixed(2)}{" "}
-                                    MB
+                                    {(transfer.metadata.size / (1024 * 1024)).toFixed(2)} MB
                                   </p>
                                 </div>
                               </div>
@@ -921,8 +766,7 @@ export default function FilesPage() {
                                     <Play className="h-4 w-4 text-white" />
                                   </Button>
                                 )}
-                                {(transfer.status === "transferring" ||
-                                  transfer.status === "paused") && (
+                                {(transfer.status === "transferring" || transfer.status === "paused") && (
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -939,26 +783,18 @@ export default function FilesPage() {
                             <div className="mt-3 space-y-2">
                               <div className="flex justify-between text-white/70 text-xs">
                                 <span>
-                                  {transfer.status === "transferring" &&
-                                    `${speed} • ${eta} remaining`}
+                                  {transfer.status === "transferring" && `${speed} • ${eta} remaining`}
                                   {transfer.status === "paused" && "Paused"}
-                                  {transfer.status === "completed" &&
-                                    "Completed"}
-                                  {transfer.status === "cancelled" &&
-                                    "Cancelled"}
-                                  {transfer.status === "error" &&
-                                    "Error: " +
-                                      (transfer.error || "Unknown error")}
+                                  {transfer.status === "completed" && "Completed"}
+                                  {transfer.status === "cancelled" && "Cancelled"}
+                                  {transfer.status === "error" && "Error: " + (transfer.error || "Unknown error")}
                                 </span>
                                 <span>{transfer.progress.toFixed(0)}%</span>
                               </div>
-                              <Progress
-                                value={transfer.progress}
-                                className="w-full h-1.5 bg-white/10"
-                              />
+                              <Progress value={transfer.progress} className="w-full h-1.5 bg-white/10" />
                             </div>
                           </div>
-                        );
+                        )
                       })}
                     </div>
                   </div>
@@ -968,9 +804,7 @@ export default function FilesPage() {
           ) : (
             <Card className="bg-white/10 backdrop-blur-xl border-0 shadow-lg rounded-3xl overflow-hidden">
               <CardContent className="p-6">
-                <p className="text-center text-white/70">
-                  Please connect to a peer before sharing files.
-                </p>
+                <p className="text-center text-white/70">Please connect to a peer before sharing files.</p>
               </CardContent>
             </Card>
           )}
@@ -978,9 +812,7 @@ export default function FilesPage() {
           {/* History section */}
           <Card className="bg-white/10 backdrop-blur-xl border-0 shadow-lg rounded-3xl overflow-hidden">
             <CardHeader className="border-b border-white/10 pb-4 flex flex-row justify-between items-center">
-              <CardTitle className="text-white text-2xl font-light">
-                Transfer History
-              </CardTitle>
+              <CardTitle className="text-white text-2xl font-light">Transfer History</CardTitle>
               <Button
                 variant="ghost"
                 onClick={clearHistory}
@@ -1010,21 +842,13 @@ export default function FilesPage() {
                               {getFileIcon(record.fileType)}
                             </div>
                             <div className="flex-grow min-w-0">
-                              <p className="text-white text-sm md:text-base truncate">
-                                {record.fileName}
-                              </p>
+                              <p className="text-white text-sm md:text-base truncate">{record.fileName}</p>
                               <div className="flex flex-wrap text-white/50 text-xs md:text-sm mt-1 gap-2">
-                                <span>
-                                  {(record.fileSize / 1024).toFixed(2)} KB
-                                </span>
+                                <span>{(record.fileSize / 1024).toFixed(2)} KB</span>
                                 <span className="hidden xs:inline mx-1">•</span>
-                                <span className="capitalize">
-                                  {record.direction}
-                                </span>
+                                <span className="capitalize">{record.direction}</span>
                                 <span className="hidden xs:inline mx-1">•</span>
-                                <span className="truncate">
-                                  {new Date(record.timestamp).toLocaleString()}
-                                </span>
+                                <span className="truncate">{new Date(record.timestamp).toLocaleString()}</span>
                               </div>
                             </div>
                           </div>
@@ -1069,17 +893,15 @@ export default function FilesPage() {
                         </div>
 
                         {/* Preview for images */}
-                        {record.preview &&
-                          record.preview !== "text" &&
-                          record.fileType.startsWith("image/") && (
-                            <div className="mt-3 p-2 bg-black/20 rounded-lg">
-                              <img
-                                src={record.preview || "/placeholder.svg"}
-                                alt={record.fileName}
-                                className="max-h-32 rounded mx-auto object-contain"
-                              />
-                            </div>
-                          )}
+                        {record.preview && record.preview !== "text" && record.fileType.startsWith("image/") && (
+                          <div className="mt-3 p-2 bg-black/20 rounded-lg">
+                            <img
+                              src={record.preview || "/placeholder.svg"}
+                              alt={record.fileName}
+                              className="max-h-32 rounded mx-auto object-contain"
+                            />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1093,9 +915,7 @@ export default function FilesPage() {
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-white/10 flex justify-between items-center">
-              <h3 className="text-white text-lg font-medium">
-                {previewFile.record.fileName}
-              </h3>
+              <h3 className="text-white text-lg font-medium">{previewFile.record.fileName}</h3>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1107,73 +927,54 @@ export default function FilesPage() {
             </div>
             <div className="flex-grow overflow-auto p-4">
               {/* Image preview */}
-              {previewFile.record.fileType.startsWith("image/") &&
-                previewFile.record.preview && (
-                  <div className="flex items-center justify-center h-full">
-                    <img
-                      src={previewFile.record.preview || "/placeholder.svg"}
-                      alt={previewFile.record.fileName}
-                      className="max-w-full max-h-[70vh] object-contain rounded-lg"
-                    />
-                  </div>
-                )}
+              {previewFile.record.fileType.startsWith("image/") && previewFile.record.preview && (
+                <div className="flex items-center justify-center h-full">
+                  <img
+                    src={previewFile.record.preview || "/placeholder.svg"}
+                    alt={previewFile.record.fileName}
+                    className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                  />
+                </div>
+              )}
 
               {/* Video preview */}
-              {previewFile.record.fileType.startsWith("video/") &&
-                previewFile.record.preview && (
-                  <div className="flex items-center justify-center h-full">
-                    <video
-                      src={previewFile.record.preview}
-                      controls
-                      className="max-w-full max-h-[70vh] rounded-lg"
-                    />
-                  </div>
-                )}
+              {previewFile.record.fileType.startsWith("video/") && previewFile.record.preview && (
+                <div className="flex items-center justify-center h-full">
+                  <video src={previewFile.record.preview} controls className="max-w-full max-h-[70vh] rounded-lg" />
+                </div>
+              )}
 
               {/* Audio preview */}
-              {previewFile.record.fileType.startsWith("audio/") &&
-                previewFile.record.preview && (
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <div className="bg-white/10 p-6 rounded-xl">
-                      <Music className="h-16 w-16 text-white/70 mx-auto mb-4" />
-                      <p className="text-white text-center mb-4">
-                        {previewFile.record.fileName}
-                      </p>
-                      <audio
-                        src={previewFile.record.preview}
-                        controls
-                        className="w-full"
-                      />
-                    </div>
+              {previewFile.record.fileType.startsWith("audio/") && previewFile.record.preview && (
+                <div className="flex flex-col items-center justify-center h-full">
+                  <div className="bg-white/10 p-6 rounded-xl">
+                    <Music className="h-16 w-16 text-white/70 mx-auto mb-4" />
+                    <p className="text-white text-center mb-4">{previewFile.record.fileName}</p>
+                    <audio src={previewFile.record.preview} controls className="w-full" />
                   </div>
-                )}
+                </div>
+              )}
 
               {/* Text preview */}
-              {previewFile.record.fileType.startsWith("text/") &&
-                previewFile.content && (
-                  <pre className="text-white/90 whitespace-pre-wrap bg-black/30 p-4 rounded-lg overflow-auto max-h-[70vh]">
-                    {previewFile.content}
-                  </pre>
-                )}
+              {previewFile.record.fileType.startsWith("text/") && previewFile.content && (
+                <pre className="text-white/90 whitespace-pre-wrap bg-black/30 p-4 rounded-lg overflow-auto max-h-[70vh]">
+                  {previewFile.content}
+                </pre>
+              )}
 
               {/* JSON preview with syntax highlighting */}
-              {previewFile.record.fileType.includes("json") &&
-                previewFile.content && (
-                  <pre className="text-white/90 whitespace-pre-wrap bg-black/30 p-4 rounded-lg overflow-auto max-h-[70vh]">
-                    {(() => {
-                      try {
-                        const formatted = JSON.stringify(
-                          JSON.parse(previewFile.content),
-                          null,
-                          2
-                        );
-                        return formatted;
-                      } catch (e) {
-                        return previewFile.content;
-                      }
-                    })()}
-                  </pre>
-                )}
+              {previewFile.record.fileType.includes("json") && previewFile.content && (
+                <pre className="text-white/90 whitespace-pre-wrap bg-black/30 p-4 rounded-lg overflow-auto max-h-[70vh]">
+                  {(() => {
+                    try {
+                      const formatted = JSON.stringify(JSON.parse(previewFile.content), null, 2)
+                      return formatted
+                    } catch (e) {
+                      return previewFile.content
+                    }
+                  })()}
+                </pre>
+              )}
 
               {/* Fallback for unsupported preview types */}
               {!previewFile.record.preview && (
@@ -1203,5 +1004,5 @@ export default function FilesPage() {
         </div>
       )}
     </div>
-  );
+  )
 }
