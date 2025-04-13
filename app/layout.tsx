@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: "File Sharing and Video Call App",
   description: "A peer-to-peer file sharing and Video Calling app Fast and Secure ",
   verification: {
-    google: "google-site-verification=ooOuBalAM5rJ67-HcQLZsEF1FCSsUysz0YPz6nC90Ds"
+    google: "ooOuBalAM5rJ67-HcQLZsEF1FCSsUysz0YPz6nC90Ds"
   }
 };
 
