@@ -8,7 +8,7 @@ import { QRCodeSVG } from "qrcode.react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Copy, Link, UserMinus, QrCode, Clipboard, Check } from "lucide-react"
-import toast from "react-hot-toast"
+import { toast } from "@/components/ui-toast"
 
 export default function Home() {
   const { peerId, isConnected, connectedPeerId, connectToPeer, disconnectPeer } = usePeer()

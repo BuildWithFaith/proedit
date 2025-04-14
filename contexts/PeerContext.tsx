@@ -2,7 +2,7 @@
 
 import React, { createContext, useState, useEffect, useContext } from "react";
 import Peer, { DataConnection } from "peerjs";
-import toast from "react-hot-toast"
+import { toast } from "@/components/ui-toast"
 
 interface PeerContextType {
   peer: Peer | null;
@@ -39,7 +39,7 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
       conn.on("open", () => {
         setIsConnected(true);
         setConnectedPeerId(conn.peer);
-        toast(`Connected to: ${conn.peer}`);
+        toast.success(`Connected to: ${conn.peer}`);
       });
 
       conn.on("data", (data) => {
@@ -73,7 +73,7 @@ export function PeerProvider({ children }: { children: React.ReactNode }) {
         setIsConnected(true);
         setConnectedPeerId(recipientId);
         setConnection(conn);
-        toast(`Connected to: ${recipientId}`);
+        toast.success(`Connected to: ${recipientId}`);
       });
 
       conn.on("close", () => {

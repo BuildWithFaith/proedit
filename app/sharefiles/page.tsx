@@ -6,7 +6,7 @@ import { useDropzone } from "react-dropzone"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload, File, Trash2, Play, Pause, X, FileText, Image, Video, Music, Archive, FileX } from "lucide-react"
-import toast from "react-hot-toast"
+import { toast } from "@/components/ui-toast"
 import { usePeer } from "@/contexts/PeerContext"
 import { Button } from "@/components/ui/button"
 import FileWorkerManager, { type FileMetadata } from "@/components/file-worker-manager"
@@ -133,8 +133,7 @@ export default function FilesPage() {
       saveTransferRecord(record)
 
       // Let the user know the file is ready
-      toast(`File Received
-        File ready: ${metadata.name}`)
+      toast.success(`File Received : ${metadata.name}`)
 
       // Remove from active transfers immediately
       setActiveTransfers((prev) => prev.filter((t) => t.id !== fileId))
@@ -190,8 +189,7 @@ export default function FilesPage() {
 
           setActiveTransfers((prev) => [...prev, newTransfer])
 
-          toast(`Receiving File
-            Starting to receive: ${metadata.name}`)
+          toast.custom(`Receiving File : ${metadata.name}`)
         }
         // Handle file chunk
         else if ("fileId" in data && "index" in data && "data" in data) {
@@ -285,7 +283,7 @@ export default function FilesPage() {
   const sendFile = useCallback(
     (file: File) => {
       if (!connection || !isConnected) {
-        toast("Not connected to a peer")
+        toast.error("Not connected to a peer")
         return
       }
 
@@ -399,8 +397,7 @@ export default function FilesPage() {
           }
 
           // Show toast
-          toast.success(`File Sent
-            File sent successfully: ${file.name}`)
+          toast.success(`File sent successfully: ${file.name}`)
 
           // Remove from active transfers after a short delay
           setTimeout(() => {
@@ -420,7 +417,7 @@ export default function FilesPage() {
           )
 
           // Show toast
-          toast("File Send Error")
+          toast.error("File Send Error")
         },
       })
 
@@ -447,7 +444,7 @@ export default function FilesPage() {
           sendFile(file)
         })
       } else {
-        toast("Please connect to a peer before sending files")
+        toast.custom("Please connect to a peer before sending files")
       }
     },
   })
@@ -516,7 +513,7 @@ export default function FilesPage() {
   const previewFileContent = useCallback(
     async (record: TransferRecord) => {
       if (!record.preview) {
-        toast(`Preview Unavailable
+        toast.custom(`Preview Unavailable
           This file cannot be previewed`)
         return
       }
@@ -560,17 +557,17 @@ export default function FilesPage() {
               }
             }
 
-            toast(`Preview Unavailable
+            toast.custom(`Preview Unavailable
               Text content could not be loaded`)
           }
         } catch (error) {
           console.error("Error loading text preview:", error)
-          toast(`Preview Error
+          toast.error(`Preview Error
             Failed to load text content`)
         }
       } else {
         // For other file types
-        toast(`Preview Unavailable
+        toast.custom(`Preview Unavailable
           Preview not supported for ${record.fileType} files`)
       }
     },
@@ -621,7 +618,7 @@ export default function FilesPage() {
         }
       }
 
-      toast(`Download Failed
+      toast.error(`Download Failed
         Could not find the file data`)
     },
     [toast, activeTransfers],
@@ -635,16 +632,14 @@ export default function FilesPage() {
       return newHistory
     })
 
-    toast(`Item Removed
-      Transfer history item has been removed.`)
+    toast.success(`Item Removed from Transfer history.`)
   }, [])
 
   // Clear all history
   const clearHistory = () => {
     setTransferHistory([])
     localStorage.removeItem("transferHistory")
-    toast(`History Cleared
-      Transfer history has been cleared.`)
+    toast.success(`Transfer history has been cleared.`)
   }
 
   // Close preview

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useCallback } from "react"
-import toast from "react-hot-toast"
+import { toast } from "@/components/ui-toast"
 
 // Define types for file transfer
 export interface FileMetadata {

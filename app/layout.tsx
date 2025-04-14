@@ -1,7 +1,7 @@
 import type React from "react";
 import type { Metadata } from "next";
 import { Navigate } from "@/components/Navigation";
-import { Toaster } from "react-hot-toast";
+import { Toaster } from "@/components/ui-toast";
 import "./globals.css";
 import { PeerProvider } from "@/contexts/PeerContext";
 import { MenuBar } from "@/components/menu-bar";
@@ -26,19 +26,7 @@ export default function RootLayout({
             <div className="absolute inset-0 backdrop-blur-md bg-black/20"></div>
             <div className="relative z-10">{children}</div>
           </main>
-          <Toaster
-            position="top-center"
-            toastOptions={{
-              style: {
-                background: "rgba(0, 0, 0, 0.3)",
-                color: "#fff",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: "14px",
-                backdropFilter: "blur(10px)"
-              },
-              duration: 3000,
-            }}
-          />
+          <Toaster/>
           <Navigate />
         </PeerProvider>
       </body>

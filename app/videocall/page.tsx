@@ -6,7 +6,7 @@ import type { MediaConnection } from "peerjs"
 import ControlBar from "@/components/control-bar"
 import BackgroundProcessor from "@/components/background-processor"
 import { useCameraSwitch } from "@/hooks/use-camera-switch"
-import toast from "react-hot-toast"
+import { toast } from "@/components/ui-toast"
 import { Loader2, Monitor, VideoIcon } from 'lucide-react'
 // Import the useScreenShare hook at the top with other imports
 import { useScreenShare } from "@/hooks/use-screen-share"
@@ -741,7 +741,7 @@ export default function Home() {
       }
     } catch (err) {
       console.error("Error switching camera:", err)
-      toast("Failed to switch camera. Please try again.")
+      toast.custom("Failed to switch camera. Please try again.")
       setIsLoading(false)
     }
   }, [
